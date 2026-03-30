@@ -4,10 +4,441 @@
 // Get a free hosted Postgres database in seconds: `npx create-db`
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum DomainStatus {
+  PENDING
+  VERIFIED
+  FAILED
+}
+
+enum MailboxStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum EmailFolder {
+  INBOX
+  SENT
+  DRAFTS
+  SPAM
+  TRASH
+  ARCHIVE
+}
+
+enum EmailStatus {
+  DRAFT
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+  SCHEDULED
+}
+
+enum TrackingEvent {
+  SENT
+  DELIVERED
+  OPENED
+  CLICKED
+  BOUNCED
+  COMPLAINED
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  DECLINED
+}
+
+enum NotificationType {
+  EMAIL_OPENED
+  NEW_EMAIL
+  TEAM_JOINED
+  MAILBOX_REQUEST
+  MAILBOX_APPROVED
+  MAILBOX_DECLINED
+  INVITE_ACCEPTED
+  BILLING_ALERT
+  DOMAIN_VERIFIED
+  SYSTEM
+}
+
+enum BillingStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  TRIALING
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+enum StorageTier {
+  GB_5
+  GB_20
+  GB_50
+  GB_100
+}
+
+model User {
+  id               String   @id @default(cuid())
+  email            String   @unique
+  passwordHash     String
+  fullName         String
+  displayName      String?
+  avatarUrl        String?
+  timezone         String   @default("UTC")
+  emailVerified    Boolean  @default(false)
+  emailVerifyToken String?
+  resetToken       String?
+  resetTokenExpiry DateTime?
+  twoFactorEnabled Boolean  @default(false)
+  twoFactorSecret  String?
+  lastLoginAt      DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  workspaceMembers WorkspaceMember[]
+  refreshTokens    RefreshToken[]
+  notifications    Notification[]
+  sessions         Session[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id         String   @id @default(cuid())
+  token      String   @unique
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceInfo String?
+  ipAddress  String?
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@map("refresh_tokens")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceName   String?
+  deviceType   String?
+  ipAddress    String?
+  location     String?
+  userAgent    String?
+  lastActiveAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  @@map("sessions")
+}
+
+model Workspace {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  logoUrl       String?
+  signature     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  members       WorkspaceMember[]
+  domains       Domain[]
+  mailboxes     Mailbox[]
+  invites       Invite[]
+  billing       Billing?
+  requests      MailboxRequest[]
+  apiKeys       ApiKey[]
+  notifications Notification[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id                 String    @id @default(cuid())
+  userId             String
+  workspaceId        String
+  role               Role      @default(MEMBER)
+  joinedAt           DateTime  @default(now())
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace          Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  notifyEmailOpened  Boolean   @default(true)
+  notifyNewEmail     Boolean   @default(true)
+  notifyTeamActivity Boolean   @default(true)
+  notifyMailboxReq   Boolean   @default(true)
+  notifyBilling      Boolean   @default(true)
+
+  @@unique([userId, workspaceId])
+  @@map("workspace_members")
+}
+
+model Invite {
+  id          String    @id @default(cuid())
+  workspaceId String
+  email       String
+  role        Role      @default(MEMBER)
+  token       String    @unique @default(cuid())
+  invitedById String
+  message     String?
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("invites")
+}
+
+model Domain {
+  id                String       @id @default(cuid())
+  workspaceId       String
+  domain            String       @unique
+  status            DomainStatus @default(PENDING)
+  mxVerified        Boolean      @default(false)
+  spfVerified       Boolean      @default(false)
+  dkimVerified      Boolean      @default(false)
+  dmarcVerified     Boolean      @default(false)
+  sesIdentityArn    String?
+  sesMailFromDomain String?
+  lastCheckedAt     DateTime?
+  verifiedAt        DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  workspace         Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  mailboxes         Mailbox[]
+
+  @@map("domains")
+}
+
+model Mailbox {
+  id             String        @id @default(cuid())
+  workspaceId    String
+  domainId       String
+  localPart      String
+  email          String        @unique
+  displayName    String?
+  status         MailboxStatus @default(ACTIVE)
+  storageLimitMb Int           @default(5120)
+  storageUsedMb  Int           @default(0)
+  password       String
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  workspace      Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  domain         Domain        @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  assignments    MailboxAssignment[]
+  emails         Email[]
+  folders        Folder[]
+
+  @@unique([localPart, domainId])
+  @@map("mailboxes")
+}
+
+model MailboxAssignment {
+  id           String   @id @default(cuid())
+  mailboxId    String
+  userId       String
+  assignedById String
+  assignedAt   DateTime @default(now())
+  mailbox      Mailbox  @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+
+  @@unique([mailboxId, userId])
+  @@map("mailbox_assignments")
+}
+
+model MailboxRequest {
+  id            String        @id @default(cuid())
+  workspaceId   String
+  requestedById String
+  localPart     String
+  domainId      String
+  reason        String?
+  status        RequestStatus @default(PENDING)
+  reviewedById  String?
+  reviewedAt    DateTime?
+  reviewNote    String?
+  createdAt     DateTime      @default(now())
+  workspace     Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("mailbox_requests")
+}
+
+model Folder {
+  id        String   @id @default(cuid())
+  mailboxId String
+  name      String
+  color     String?
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  mailbox   Mailbox  @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+  emails    EmailFolder_Assignment[]
+
+  @@unique([mailboxId, name])
+  @@map("folders")
+}
+
+model Email {
+  id                 String      @id @default(cuid())
+  mailboxId          String
+  messageId          String?     @unique
+  folder             EmailFolder @default(INBOX)
+  status             EmailStatus @default(DRAFT)
+  fromAddress        String
+  fromName           String?
+  toAddresses        String[]
+  ccAddresses        String[]    @default([])
+  bccAddresses       String[]    @default([])
+  replyTo            String?
+  subject            String
+  bodyHtml           String
+  bodyText           String?
+  snippet            String?
+  threadId           String?
+  inReplyTo          String?
+  references         String[]    @default([])
+  isRead             Boolean     @default(false)
+  isStarred          Boolean     @default(false)
+  isDraft            Boolean     @default(false)
+  isScheduled        Boolean     @default(false)
+  scheduledAt        DateTime?
+  sentAt             DateTime?
+  receivedAt         DateTime?
+  deletedAt          DateTime?
+  trackingId         String?     @unique
+  readReceiptEnabled Boolean     @default(true)
+  sizeBytes          Int         @default(0)
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  mailbox            Mailbox     @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+  attachments        Attachment[]
+  trackingEvents     TrackingEvent_Log[]
+  folderAssignments  EmailFolder_Assignment[]
+
+  @@index([mailboxId, folder])
+  @@index([threadId])
+  @@index([trackingId])
+  @@map("emails")
+}
+
+model EmailFolder_Assignment {
+  id       String @id @default(cuid())
+  emailId  String
+  folderId String
+  email    Email  @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  folder   Folder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  @@unique([emailId, folderId])
+  @@map("email_folder_assignments")
+}
+
+model Attachment {
+  id          String   @id @default(cuid())
+  emailId     String
+  filename    String
+  mimeType    String
+  sizeBytes   Int
+  storagePath String
+  createdAt   DateTime @default(now())
+  email       Email    @relation(fields: [emailId], references: [id], onDelete: Cascade)
+
+  @@map("attachments")
+}
+
+model TrackingEvent_Log {
+  id         String        @id @default(cuid())
+  emailId    String
+  event      TrackingEvent
+  ipAddress  String?
+  userAgent  String?
+  device     String?
+  os         String?
+  location   String?
+  clickedUrl String?
+  occurredAt DateTime      @default(now())
+  email      Email         @relation(fields: [emailId], references: [id], onDelete: Cascade)
+
+  @@map("tracking_events")
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  userId      String
+  workspaceId String?
+  type        NotificationType
+  title       String
+  body        String?
+  data        Json?
+  isRead      Boolean          @default(false)
+  readAt      DateTime?
+  createdAt   DateTime         @default(now())
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace?       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model Billing {
+  id                 String        @id @default(cuid())
+  workspaceId        String        @unique
+  status             BillingStatus @default(TRIALING)
+  storageTier        StorageTier   @default(GB_5)
+  trialEndsAt        DateTime?
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  cancelledAt        DateTime?
+  cardLast4          String?
+  cardBrand          String?
+  cardExpiry         String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  workspace          Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invoices           Invoice[]
+
+  @@map("billing")
+}
+
+model Invoice {
+  id           String        @id @default(cuid())
+  billingId    String
+  amount       Float
+  mailboxCount Int
+  storageCost  Float
+  status       InvoiceStatus @default(PENDING)
+  paidAt       DateTime?
+  periodStart  DateTime
+  periodEnd    DateTime
+  createdAt    DateTime      @default(now())
+  billing      Billing       @relation(fields: [billingId], references: [id], onDelete: Cascade)
+
+  @@map("invoices")
+}
+
+model ApiKey {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  keyHash     String   @unique
+  keyPrefix   String
+  permissions String[]
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("api_keys")
 }
