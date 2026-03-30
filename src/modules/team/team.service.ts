@@ -1,0 +1,206 @@
+import crypto from "node:crypto";
+import { RequestStatus, Role } from "@prisma/client";
+import { prisma } from "../../config/database";
+import { hashPassword } from "../../utils/password";
+import { signAccessToken, signRefreshToken } from "../../utils/jwt";
+import { sendAppEmail } from "../../config/ses";
+
+export function listMembers(workspaceId: string) {
+  return prisma.workspaceMember.findMany({
+    where: { workspaceId },
+    include: { user: true },
+    orderBy: { joinedAt: "asc" },
+  });
+}
+
+export function getMember(workspaceId: string, memberId: string) {
+  return prisma.workspaceMember.findFirst({
+    where: { workspaceId, id: memberId },
+    include: {
+      user: true,
+    },
+  });
+}
+
+export async function updateMemberRole(workspaceId: string, memberId: string, role: "ADMIN" | "MEMBER", actorUserId: string) {
+  const actor = await prisma.workspaceMember.findUnique({
+    where: { userId_workspaceId: { userId: actorUserId, workspaceId } },
+  });
+  if (!actor || actor.role !== Role.OWNER) throw new Error("FORBIDDEN");
+
+  const target = await prisma.workspaceMember.findFirst({
+    where: { workspaceId, id: memberId },
+  });
+  if (!target) throw new Error("NOT_FOUND");
+  if (target.role === Role.OWNER) throw new Error("FORBIDDEN");
+
+  return prisma.workspaceMember.update({ where: { id: memberId }, data: { role } });
+}
+
+export async function removeMember(workspaceId: string, memberId: string) {
+  const target = await prisma.workspaceMember.findFirst({ where: { workspaceId, id: memberId } });
+  if (!target) throw new Error("NOT_FOUND");
+  if (target.role === Role.OWNER) throw new Error("FORBIDDEN");
+  await prisma.mailboxAssignment.deleteMany({ where: { userId: target.userId } });
+  return prisma.workspaceMember.delete({ where: { id: memberId } });
+}
+
+export async function inviteMember(
+  workspaceId: string,
+  invitedById: string,
+  input: { email: string; role: "ADMIN" | "MEMBER"; mailboxIds: string[]; message?: string },
+) {
+  const existingMember = await prisma.workspaceMember.findFirst({
+    where: { workspaceId, user: { email: input.email } },
+  });
+  if (existingMember) throw new Error("CONFLICT");
+  const pending = await prisma.invite.findFirst({
+    where: { workspaceId, email: input.email, acceptedAt: null, expiresAt: { gt: new Date() } },
+  });
+  if (pending) throw new Error("CONFLICT");
+
+  const token = crypto.randomBytes(24).toString("hex");
+  const invite = await prisma.invite.create({
+    data: {
+      workspaceId,
+      email: input.email,
+      role: input.role,
+      invitedById,
+      message: input.message,
+      token,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    },
+  });
+
+  await sendAppEmail({
+    from: `no-reply@${process.env.APP_DOMAIN || "dockmail.app"}`,
+    to: [input.email],
+    subject: "You're invited to Dockmail workspace",
+    html: `<p>You have been invited. Accept here: https://dockmail.app/invite?token=${token}</p>`,
+  }).catch(() => null);
+
+  if (input.mailboxIds.length > 0) {
+    await Promise.all(
+      input.mailboxIds.map(async (mailboxId) => {
+        const mailbox = await prisma.mailbox.findUnique({ where: { id: mailboxId } });
+        if (!mailbox) return;
+      }),
+    );
+  }
+
+  return invite;
+}
+
+export function listInvites(workspaceId: string) {
+  return prisma.invite.findMany({
+    where: { workspaceId, acceptedAt: null },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+export function cancelInvite(workspaceId: string, inviteId: string) {
+  return prisma.invite.deleteMany({ where: { id: inviteId, workspaceId, acceptedAt: null } });
+}
+
+export async function resendInvite(workspaceId: string, inviteId: string) {
+  const invite = await prisma.invite.findFirst({ where: { id: inviteId, workspaceId, acceptedAt: null } });
+  if (!invite) throw new Error("NOT_FOUND");
+  await sendAppEmail({
+    from: `no-reply@${process.env.APP_DOMAIN || "dockmail.app"}`,
+    to: [invite.email],
+    subject: "Dockmail invite reminder",
+    html: `<p>Accept invite: https://dockmail.app/invite?token=${invite.token}</p>`,
+  }).catch(() => null);
+  return invite;
+}
+
+export async function acceptInvite(input: { token: string; password?: string; fullName?: string }) {
+  const invite = await prisma.invite.findUnique({ where: { token: input.token } });
+  if (!invite) throw new Error("NOT_FOUND");
+  if (invite.acceptedAt) throw new Error("INVITE_ALREADY_USED");
+  if (invite.expiresAt.getTime() < Date.now()) throw new Error("INVITE_EXPIRED");
+
+  const result = await prisma.$transaction(async (tx) => {
+    let user = await tx.user.findUnique({ where: { email: invite.email } });
+    if (!user) {
+      if (!input.password || !input.fullName) throw new Error("VALIDATION");
+      user = await tx.user.create({
+        data: {
+          email: invite.email,
+          fullName: input.fullName,
+          passwordHash: await hashPassword(input.password),
+        },
+      });
+    }
+    await tx.workspaceMember.upsert({
+      where: { userId_workspaceId: { userId: user.id, workspaceId: invite.workspaceId } },
+      create: { userId: user.id, workspaceId: invite.workspaceId, role: invite.role },
+      update: { role: invite.role },
+    });
+    await tx.invite.update({
+      where: { id: invite.id },
+      data: { acceptedAt: new Date() },
+    });
+    return user;
+  });
+
+  const accessToken = signAccessToken({
+    id: result.id,
+    email: result.email,
+    fullName: result.fullName,
+  });
+  const refreshToken = signRefreshToken({ sub: result.id });
+
+  await prisma.refreshToken.create({
+    data: {
+      token: refreshToken,
+      userId: result.id,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    },
+  });
+
+  return { tokens: { accessToken, refreshToken } };
+}
+
+export function mailboxRequests(workspaceId: string) {
+  return prisma.mailboxRequest.findMany({
+    where: { workspaceId, status: RequestStatus.PENDING },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+export function createMailboxRequest(
+  workspaceId: string,
+  requestedById: string,
+  input: { localPart: string; domainId: string; reason?: string },
+) {
+  return prisma.mailboxRequest.create({
+    data: {
+      workspaceId,
+      requestedById,
+      localPart: input.localPart,
+      domainId: input.domainId,
+      reason: input.reason,
+    },
+  });
+}
+
+export async function reviewMailboxRequest(
+  workspaceId: string,
+  requestId: string,
+  reviewerId: string,
+  input: { status: "APPROVED" | "DECLINED"; reviewNote?: string },
+) {
+  const request = await prisma.mailboxRequest.findFirst({ where: { id: requestId, workspaceId } });
+  if (!request) throw new Error("NOT_FOUND");
+
+  return prisma.mailboxRequest.update({
+    where: { id: request.id },
+    data: {
+      status: input.status,
+      reviewNote: input.reviewNote,
+      reviewedAt: new Date(),
+      reviewedById: reviewerId,
+    },
+  });
+}

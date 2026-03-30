@@ -2,7 +2,12 @@ import { Router } from "express";
 import { requireAuth } from "../../middleware/auth";
 import { requireRole } from "../../middleware/role";
 import { validate } from "../../middleware/validate";
-import { createMailboxSchema, mailboxAssignSchema } from "./mailbox.schema";
+import {
+  createMailboxSchema,
+  mailboxAssignSchema,
+  mailboxRequestSchema,
+  reviewMailboxRequestSchema,
+} from "./mailbox.schema";
 import * as controller from "./mailbox.controller";
 
 export const mailboxRouter = Router({ mergeParams: true });
@@ -16,4 +21,17 @@ mailboxRouter.post(
   requireRole("ADMIN", "OWNER"),
   validate({ body: mailboxAssignSchema }),
   controller.assignMailbox,
+);
+mailboxRouter.get("/requests", requireRole("ADMIN", "OWNER"), controller.listMailboxRequests);
+mailboxRouter.post(
+  "/requests",
+  requireRole("MEMBER", "ADMIN", "OWNER"),
+  validate({ body: mailboxRequestSchema }),
+  controller.createMailboxRequest,
+);
+mailboxRouter.patch(
+  "/requests/:requestId",
+  requireRole("ADMIN", "OWNER"),
+  validate({ body: reviewMailboxRequestSchema }),
+  controller.reviewMailboxRequest,
 );

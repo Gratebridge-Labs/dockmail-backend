@@ -11,3 +11,14 @@ export const createMailboxSchema = z.object({
 export const mailboxAssignSchema = z.object({
   userId: z.string().cuid(),
 });
+
+export const mailboxRequestSchema = z.object({
+  localPart: z.string().min(1).max(64),
+  domainId: z.string().cuid(),
+  reason: z.string().max(500).optional(),
+});
+
+export const reviewMailboxRequestSchema = z.object({
+  status: z.enum(["APPROVED", "DECLINED"]),
+  reviewNote: z.string().max(500).optional(),
+});

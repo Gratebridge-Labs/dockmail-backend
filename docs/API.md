@@ -98,3 +98,53 @@
 **Description:** Link click tracking and redirect.
 
 **Auth required:** No
+
+## Team & Invites
+
+- `GET /v1/workspaces/:workspaceId/team`
+- `GET /v1/workspaces/:workspaceId/team/:memberId`
+- `PATCH /v1/workspaces/:workspaceId/team/:memberId`
+- `DELETE /v1/workspaces/:workspaceId/team/:memberId`
+- `POST /v1/workspaces/:workspaceId/team/invite`
+- `GET /v1/workspaces/:workspaceId/team/invites`
+- `DELETE /v1/workspaces/:workspaceId/team/invites/:inviteId`
+- `POST /v1/workspaces/:workspaceId/team/invites/:inviteId/resend`
+- `POST /v1/auth/accept-invite`
+
+## Billing
+
+- `GET /v1/workspaces/:workspaceId/billing`
+- `GET /v1/workspaces/:workspaceId/billing/invoices`
+- `GET /v1/workspaces/:workspaceId/billing/invoices/:invoiceId`
+- `POST /v1/workspaces/:workspaceId/billing/payment-method`
+- `DELETE /v1/workspaces/:workspaceId/billing/payment-method`
+- `PATCH /v1/workspaces/:workspaceId/billing/storage`
+- `POST /v1/workspaces/:workspaceId/billing/simulate-payment`
+
+## Notifications
+
+- `GET /v1/notifications`
+- `PATCH /v1/notifications/:notificationId/read`
+- `POST /v1/notifications/read-all`
+- `DELETE /v1/notifications/:notificationId`
+- `GET /v1/notifications/count`
+
+## Settings
+
+- `GET /v1/users/settings`
+- `PATCH /v1/users/settings/profile`
+- `POST /v1/users/settings/avatar`
+- `DELETE /v1/users/settings/avatar`
+- `PATCH /v1/users/settings/notifications`
+- `GET /v1/users/settings/sessions`
+- `DELETE /v1/users/settings/sessions/:sessionId`
+
+## Folders and Attachments
+
+- `GET /v1/mailboxes/:mailboxId/folders`
+- `POST /v1/mailboxes/:mailboxId/folders`
+- `PATCH /v1/mailboxes/:mailboxId/folders/:folderId`
+- `DELETE /v1/mailboxes/:mailboxId/folders/:folderId`
+- `POST /v1/mailboxes/:mailboxId/emails/:emailId/attachments`
+- `GET /v1/mailboxes/:mailboxId/emails/:emailId/attachments/:attachmentId`
+- `DELETE /v1/mailboxes/:mailboxId/emails/:emailId/attachments/:attachmentId`

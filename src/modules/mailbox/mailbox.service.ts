@@ -77,3 +77,49 @@ export async function assignMailbox(mailboxId: string, userId: string, assignedB
     data: { mailboxId, userId, assignedById },
   });
 }
+
+export function listMailboxRequests(workspaceId: string) {
+  return prisma.mailboxRequest.findMany({
+    where: { workspaceId, status: "PENDING" },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+export function createMailboxRequest(
+  workspaceId: string,
+  requestedById: string,
+  input: { localPart: string; domainId: string; reason?: string },
+) {
+  return prisma.mailboxRequest.create({
+    data: { workspaceId, requestedById, localPart: input.localPart, domainId: input.domainId, reason: input.reason },
+  });
+}
+
+export async function reviewMailboxRequest(
+  workspaceId: string,
+  requestId: string,
+  reviewerId: string,
+  input: { status: "APPROVED" | "DECLINED"; reviewNote?: string },
+) {
+  const request = await prisma.mailboxRequest.findFirst({ where: { id: requestId, workspaceId } });
+  if (!request) throw new Error("NOT_FOUND");
+  const updated = await prisma.mailboxRequest.update({
+    where: { id: request.id },
+    data: {
+      status: input.status,
+      reviewNote: input.reviewNote,
+      reviewedById: reviewerId,
+      reviewedAt: new Date(),
+    },
+  });
+  if (input.status === "APPROVED") {
+    const mailbox = await createMailbox(workspaceId, {
+      localPart: request.localPart,
+      domainId: request.domainId,
+      assignToUserId: request.requestedById,
+      storageLimitMb: 5120,
+    });
+    return { request: updated, mailbox };
+  }
+  return { request: updated };
+}

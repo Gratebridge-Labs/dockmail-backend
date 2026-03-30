@@ -33,3 +33,29 @@ export async function assignMailbox(req: Request, res: Response) {
   const data = await service.assignMailbox(String(req.params.mailboxId), req.body.userId, req.user.id);
   return ok(res, data);
 }
+
+export async function listMailboxRequests(req: Request, res: Response) {
+  const data = await service.listMailboxRequests(String(req.params.workspaceId));
+  return ok(res, data);
+}
+
+export async function createMailboxRequest(req: Request, res: Response) {
+  if (!req.user) return fail(res, "UNAUTHORIZED", "Unauthorized", 401);
+  const data = await service.createMailboxRequest(String(req.params.workspaceId), req.user.id, req.body);
+  return ok(res, data, 201);
+}
+
+export async function reviewMailboxRequest(req: Request, res: Response) {
+  if (!req.user) return fail(res, "UNAUTHORIZED", "Unauthorized", 401);
+  try {
+    const data = await service.reviewMailboxRequest(
+      String(req.params.workspaceId),
+      String(req.params.requestId),
+      req.user.id,
+      req.body,
+    );
+    return ok(res, data);
+  } catch {
+    return fail(res, "NOT_FOUND", "Request not found", 404);
+  }
+}
