@@ -8,7 +8,7 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 
 app.get('/', (req, res) => {
-  res.json({ message: 'InboxOne Backend v1' });
+  res.json({ message: 'DockMail Backend API' });
 });
 
 app.get('/health', async (req, res) => {
@@ -21,5 +21,5 @@ app.get('/health', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`DockMail Backend running on http://localhost:${PORT}`);
 });

@@ -1,5 +1,5 @@
 {
-  "name": "inboxone-backendv1",
+  "name": "dockmail-backend",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
@@ -7,10 +7,10 @@
     "dev": "nodemon index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "keywords": ["dockmail", "email"],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "DockMail - Multi-tenant Email Service Backend",
   "dependencies": {
     "express": "^5.2.1",
     "pg": "^8.13.1",
