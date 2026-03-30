@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { prisma } from "../../config/database";
 import { env } from "../../config/env";
+import { logger } from "../../config/logger";
 import { sendAppEmail } from "../../config/ses";
 import { injectTrackingPixel } from "../../utils/tracking";
 
@@ -14,10 +15,14 @@ export async function listEmails(mailboxId: string, folder?: string) {
 }
 
 export async function createDraft(mailboxId: string, input: any) {
+  const mailbox = await prisma.mailbox.findFirst({ where: { id: mailboxId } });
+  if (!mailbox) throw new Error("NOT_FOUND");
+
   return prisma.email.create({
     data: {
       mailboxId,
-      fromAddress: "",
+      fromAddress: mailbox.email,
+      fromName: mailbox.displayName ?? undefined,
       subject: input.subject,
       bodyHtml: input.bodyHtml,
       bodyText: input.bodyText,
@@ -42,16 +47,26 @@ export async function sendDraft(mailboxId: string, emailId: string, scheduledAt?
   if (!email) throw new Error("NOT_FOUND");
   if (!email.toAddresses.length || !email.subject) throw new Error("VALIDATION");
 
+  const fromData = {
+    fromAddress: email.mailbox.email,
+    fromName: email.mailbox.displayName ?? undefined,
+  };
+
   if (scheduledAt) {
     return prisma.email.update({
       where: { id: email.id },
-      data: { status: "SCHEDULED", isScheduled: true, scheduledAt: new Date(scheduledAt) },
+      data: {
+        status: "SCHEDULED",
+        isScheduled: true,
+        scheduledAt: new Date(scheduledAt),
+        ...fromData,
+      },
     });
   }
 
   return prisma.email.update({
     where: { id: email.id },
-    data: { status: "QUEUED", isScheduled: false },
+    data: { status: "QUEUED", isScheduled: false, ...fromData },
   });
 }
 
@@ -67,14 +82,22 @@ export async function performSend(mailboxId: string, emailId: string) {
   const trackingUrl = `${env.TRACKING_PIXEL_URL}/${trackingId}`;
   const bodyHtml = injectTrackingPixel(email.bodyHtml, trackingUrl);
 
-  const messageId = await sendAppEmail({
-    from: email.mailbox.email,
-    to: email.toAddresses,
-    subject: email.subject,
-    html: bodyHtml,
-    text: email.bodyText ?? undefined,
-    replyTo: email.replyTo ?? undefined,
-  });
+  const from = email.mailbox.email;
+  let messageId: string | undefined;
+  try {
+    messageId = await sendAppEmail({
+      from,
+      to: email.toAddresses,
+      subject: email.subject,
+      html: bodyHtml,
+      text: email.bodyText ?? undefined,
+      replyTo: email.replyTo ?? undefined,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    logger.error(`SES send failed mailbox=${mailboxId} email=${emailId} from=${from} — ${msg}`);
+    throw e;
+  }
 
   return prisma.email.update({
     where: { id: email.id },
@@ -83,6 +106,8 @@ export async function performSend(mailboxId: string, emailId: string) {
       folder: "SENT",
       sentAt: new Date(),
       isDraft: false,
+      fromAddress: from,
+      fromName: email.mailbox.displayName ?? undefined,
       trackingId,
       messageId: messageId ?? undefined,
     },

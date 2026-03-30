@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/database";
+import { logger } from "../../config/logger";
 import { addMailcowMailbox } from "../../config/mailcow";
 
 const mailboxInclude = { domain: true, assignments: true } as const;
@@ -47,6 +48,22 @@ export async function createMailbox(
     include: mailboxInclude,
   });
   if (existing) {
+    // Idempotent create: DB row may exist without Mailcow (e.g. first run had no MAILCOW_* env).
+    // Retry provisioning so a second API call heals the gap instead of returning early forever.
+    try {
+      await addMailcowMailbox({
+        localPart: existing.localPart,
+        domain: existing.domain.domain,
+        password: existing.password,
+        name: existing.displayName ?? undefined,
+        quotaMb: existing.storageLimitMb,
+      });
+    } catch (e) {
+      logger.error(
+        `addMailcowMailbox (existing mailbox heal) failed email=${existing.email}: ${e instanceof Error ? e.message : String(e)}`,
+        e instanceof Error ? e : undefined,
+      );
+    }
     return existing;
   }
 

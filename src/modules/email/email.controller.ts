@@ -9,8 +9,15 @@ export async function listEmails(req: Request, res: Response) {
 }
 
 export async function createDraft(req: Request, res: Response) {
-  const data = await service.createDraft(String(req.params.mailboxId), req.body);
-  return ok(res, data, 201);
+  try {
+    const data = await service.createDraft(String(req.params.mailboxId), req.body);
+    return ok(res, data, 201);
+  } catch (error) {
+    if (error instanceof Error && error.message === "NOT_FOUND") {
+      return fail(res, "NOT_FOUND", "Mailbox not found", 404);
+    }
+    return fail(res, "INTERNAL_ERROR", "Failed to create draft", 500);
+  }
 }
 
 export async function sendDraft(req: Request, res: Response) {
