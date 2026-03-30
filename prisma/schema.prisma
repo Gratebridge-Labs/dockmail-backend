@@ -213,6 +213,7 @@ model Domain {
   spfVerified       Boolean      @default(false)
   dkimVerified      Boolean      @default(false)
   dmarcVerified     Boolean      @default(false)
+  mailcowVerified   Boolean      @default(false)
   sesIdentityArn    String?
   sesMailFromDomain String?
   lastCheckedAt     DateTime?

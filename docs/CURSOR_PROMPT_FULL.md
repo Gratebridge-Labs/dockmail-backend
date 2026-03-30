@@ -664,7 +664,7 @@ Example shape (values must come from SES for DKIM/MAIL FROM):
     { "type": "TXT", "name": "@", "value": "v=spf1 include:amazonses.com mx -all" },
     { "type": "TXT", "name": "_dmarc", "value": "v=DMARC1; p=none; rua=mailto:dmarc@acme.com; fo=1" },
     { "type": "CNAME", "name": "<ses>._domainkey", "value": "<ses>.dkim.amazonses.com" },
-    { "type": "MX", "name": "bounce", "value": "10 feedback-smtp.<region>.amazonses.com" },
+    { "type": "MX", "name": "bounce", "value": "feedback-smtp.<region>.amazonses.com", "priority": 10 },
     { "type": "TXT", "name": "bounce", "value": "v=spf1 include:amazonses.com ~all" }
   ]
 }

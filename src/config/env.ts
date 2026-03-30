@@ -17,6 +17,8 @@ const envSchema = z.object({
   SES_CONFIGURATION_SET: z.string().optional(),
   MAILCOW_API_URL: z.string().optional(),
   MAILCOW_API_KEY: z.string().optional(),
+  /** Set to "true" when calling Mailcow over HTTPS with a self-signed cert (e.g. SSH tunnel to localhost). */
+  MAILCOW_TLS_INSECURE: z.enum(["true", "false"]).optional(),
   APP_DOMAIN: z.string().default("dockmail.app"),
   API_URL: z.string().optional(),
   INBOUND_MX_HOST: z.string().default("mail.dockmail.app"),

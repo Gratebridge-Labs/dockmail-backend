@@ -197,7 +197,7 @@ All **other models** from the original spec remain as specified (User, Workspace
     { "type": "CNAME", "name": "<ses-token-1>._domainkey", "value": "<ses-token-1>.dkim.amazonses.com" },
     { "type": "CNAME", "name": "<ses-token-2>._domainkey", "value": "<ses-token-2>.dkim.amazonses.com" },
     { "type": "CNAME", "name": "<ses-token-3>._domainkey", "value": "<ses-token-3>.dkim.amazonses.com" },
-    { "type": "MX", "name": "bounce", "value": "10 feedback-smtp.<region>.amazonses.com" },
+    { "type": "MX", "name": "bounce", "value": "feedback-smtp.<region>.amazonses.com", "priority": 10 },
     { "type": "TXT", "name": "bounce", "value": "v=spf1 include:amazonses.com ~all" }
   ]
 }

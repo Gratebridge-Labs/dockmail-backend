@@ -1,6 +1,9 @@
 import crypto from "node:crypto";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/database";
 import { addMailcowMailbox } from "../../config/mailcow";
+
+const mailboxInclude = { domain: true, assignments: true } as const;
 
 function genMailboxPassword() {
   return crypto.randomBytes(24).toString("hex");
@@ -38,36 +41,62 @@ export async function createMailbox(
   if (domain.status !== "VERIFIED") throw new Error("DOMAIN_NOT_VERIFIED");
 
   const email = `${input.localPart}@${domain.domain}`;
+
+  const existing = await prisma.mailbox.findFirst({
+    where: { workspaceId, domainId: input.domainId, localPart: input.localPart },
+    include: mailboxInclude,
+  });
+  if (existing) {
+    return existing;
+  }
+
   const password = genMailboxPassword();
 
-  const mailbox = await prisma.mailbox.create({
-    data: {
-      workspaceId,
-      domainId: input.domainId,
-      localPart: input.localPart,
-      email,
-      displayName: input.displayName,
-      storageLimitMb: input.storageLimitMb,
-      password,
-      assignments: input.assignToUserId
-        ? {
-            create: {
-              userId: input.assignToUserId,
-              assignedById: input.assignToUserId,
-            },
-          }
-        : undefined,
-    },
-    include: { domain: true, assignments: true },
-  });
+  let mailbox;
+  try {
+    mailbox = await prisma.mailbox.create({
+      data: {
+        workspaceId,
+        domainId: input.domainId,
+        localPart: input.localPart,
+        email,
+        displayName: input.displayName,
+        storageLimitMb: input.storageLimitMb,
+        password,
+        assignments: input.assignToUserId
+          ? {
+              create: {
+                userId: input.assignToUserId,
+                assignedById: input.assignToUserId,
+              },
+            }
+          : undefined,
+      },
+      include: mailboxInclude,
+    });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      const again = await prisma.mailbox.findFirst({
+        where: { email },
+        include: mailboxInclude,
+      });
+      if (again) return again;
+    }
+    throw e;
+  }
 
-  await addMailcowMailbox({
-    localPart: input.localPart,
-    domain: domain.domain,
-    password,
-    name: input.displayName,
-    quotaMb: input.storageLimitMb,
-  });
+  try {
+    await addMailcowMailbox({
+      localPart: input.localPart,
+      domain: domain.domain,
+      password,
+      name: input.displayName,
+      quotaMb: input.storageLimitMb,
+    });
+  } catch (e) {
+    await prisma.mailbox.delete({ where: { id: mailbox.id } }).catch(() => {});
+    throw e;
+  }
 
   return mailbox;
 }

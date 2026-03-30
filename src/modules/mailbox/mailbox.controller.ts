@@ -1,4 +1,7 @@
 import { Request, Response } from "express";
+import { Prisma } from "@prisma/client";
+import { env } from "../../config/env";
+import { logger } from "../../config/logger";
 import { fail, ok } from "../../utils/response";
 import * as service from "./mailbox.service";
 
@@ -24,7 +27,16 @@ export async function createMailbox(req: Request, res: Response) {
     if (error instanceof Error && error.message === "DOMAIN_NOT_VERIFIED") {
       return fail(res, "DOMAIN_NOT_VERIFIED", "Domain must be verified first", 409);
     }
-    return fail(res, "INTERNAL_ERROR", "Failed to create mailbox", 500);
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return fail(res, "CONFLICT", "Mailbox already exists", 409);
+    }
+    logger.error(
+      `createMailbox failed: ${error instanceof Error ? error.message : String(error)}`,
+      error instanceof Error ? error : undefined,
+    );
+    const detail =
+      env.NODE_ENV === "development" && error instanceof Error ? error.message : "Failed to create mailbox";
+    return fail(res, "INTERNAL_ERROR", detail, 500);
   }
 }
 

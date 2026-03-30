@@ -1,6 +1,8 @@
 import { CreateEmailIdentityCommand, GetEmailIdentityCommand } from "@aws-sdk/client-sesv2";
 import { prisma } from "../../config/database";
 import { env } from "../../config/env";
+import { logger } from "../../config/logger";
+import { ensureMailcowDomain } from "../../config/mailcow";
 import { sesClient } from "../../config/ses";
 import { hasMxRecord, hasTxtContains } from "../../utils/dns";
 
@@ -49,7 +51,12 @@ export async function addDomain(workspaceId: string, domainRaw: string) {
       name: `${token}._domainkey`,
       value: `${token}.dkim.amazonses.com`,
     })),
-    { type: "MX", name: "bounce", value: `10 feedback-smtp.${env.AWS_REGION}.amazonses.com` },
+    {
+      type: "MX",
+      name: "bounce",
+      value: `feedback-smtp.${env.AWS_REGION}.amazonses.com`,
+      priority: 10,
+    },
     { type: "TXT", name: "bounce", value: "v=spf1 include:amazonses.com ~all" },
   ];
 
@@ -64,6 +71,17 @@ export async function verifyDomain(workspaceId: string, domainId: string) {
   const domain = await getDomain(workspaceId, domainId);
   if (!domain) throw new Error("NOT_FOUND");
 
+  let mailcowVerified = true;
+  if (env.MAILCOW_API_URL && env.MAILCOW_API_KEY) {
+    try {
+      await ensureMailcowDomain(domain.domain);
+      mailcowVerified = true;
+    } catch (e) {
+      logger.error(`ensureMailcowDomain failed for ${domain.domain}: ${e instanceof Error ? e.message : String(e)}`);
+      mailcowVerified = false;
+    }
+  }
+
   const [mxVerified, spfVerified, dmarcVerified] = await Promise.all([
     hasMxRecord(domain.domain, env.INBOUND_MX_HOST).catch(() => false),
     hasTxtContains(domain.domain, "amazonses.com").catch(() => false),
@@ -73,7 +91,7 @@ export async function verifyDomain(workspaceId: string, domainId: string) {
   const sesIdentity = await sesClient.send(new GetEmailIdentityCommand({ EmailIdentity: domain.domain }));
   const dkimVerified = sesIdentity.VerifiedForSendingStatus ?? false;
 
-  const verified = mxVerified && spfVerified && dkimVerified && dmarcVerified;
+  const verified = mailcowVerified && mxVerified && spfVerified && dkimVerified && dmarcVerified;
   const updated = await prisma.domain.update({
     where: { id: domain.id },
     data: {
@@ -81,6 +99,7 @@ export async function verifyDomain(workspaceId: string, domainId: string) {
       spfVerified,
       dkimVerified,
       dmarcVerified,
+      mailcowVerified,
       status: verified ? "VERIFIED" : "FAILED",
       verifiedAt: verified ? new Date() : null,
       lastCheckedAt: new Date(),
@@ -89,6 +108,6 @@ export async function verifyDomain(workspaceId: string, domainId: string) {
 
   return {
     domain: updated,
-    checks: { mxVerified, spfVerified, dkimVerified, dmarcVerified },
+    checks: { mxVerified, spfVerified, dkimVerified, dmarcVerified, mailcowVerified },
   };
 }
