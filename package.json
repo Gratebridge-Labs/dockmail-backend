@@ -7,16 +7,21 @@
     "dev": "nodemon index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["dockmail", "email"],
+  "keywords": [
+    "dockmail",
+    "email"
+  ],
   "author": "",
   "license": "ISC",
   "description": "DockMail - Multi-tenant Email Service Backend",
   "dependencies": {
+    "dotenv": "^16.4.5",
     "express": "^5.2.1",
-    "pg": "^8.13.1",
-    "dotenv": "^16.4.5"
+    "pg": "^8.13.1"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "@prisma/client": "^7.6.0",
+    "nodemon": "^3.1.14",
+    "prisma": "^7.6.0"
   }
 }
