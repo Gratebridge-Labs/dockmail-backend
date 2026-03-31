@@ -22,6 +22,15 @@ const envSchema = z.object({
   APP_DOMAIN: z.string().default("dockmail.app"),
   API_URL: z.string().optional(),
   INBOUND_MX_HOST: z.string().default("mail.dockmail.app"),
+  /** IMAP host for inbound sync (defaults to INBOUND_MX_HOST / Mailcow). */
+  IMAP_HOST: z.string().optional(),
+  IMAP_PORT: z.coerce.number().default(993),
+  /** Set "true" for self-signed IMAP TLS (dev / tunnel). */
+  IMAP_TLS_INSECURE: z.enum(["true", "false"]).optional(),
+  /** Set "false" to disable the IMAP IDLE workers. */
+  IMAP_SYNC_ENABLED: z.enum(["true", "false"]).default("true"),
+  /** Max messages to import on first sync when imapLastUid is null. */
+  IMAP_INITIAL_SYNC_LIMIT: z.coerce.number().default(50),
   TRACKING_PIXEL_URL: z.string().default("https://api.dockmail.app/v1/track/open"),
   TRACKING_LINK_URL: z.string().default("https://api.dockmail.app/v1/track/click"),
   UPLOAD_DIR: z.string().default("./uploads"),

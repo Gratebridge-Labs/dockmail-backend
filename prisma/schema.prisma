@@ -46,6 +46,7 @@ enum EmailStatus {
   DELIVERED
   FAILED
   SCHEDULED
+  RECEIVED
 }
 
 enum TrackingEvent {
@@ -237,6 +238,8 @@ model Mailbox {
   storageLimitMb Int           @default(5120)
   storageUsedMb  Int           @default(0)
   password       String
+  /// Last IMAP UID processed for INBOX sync (Mailcow/Dovecot).
+  imapLastUid    Int?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   workspace      Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
