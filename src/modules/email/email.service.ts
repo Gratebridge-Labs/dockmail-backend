@@ -97,6 +97,10 @@ export async function performSend(mailboxId: string, emailId: string) {
       html: bodyHtml,
       text: email.bodyText ?? undefined,
       replyTo: email.replyTo ?? undefined,
+      smtpAuth: {
+        user: email.mailbox.email,
+        pass: email.mailbox.password,
+      },
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
