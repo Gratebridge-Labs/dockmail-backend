@@ -7,6 +7,6 @@ export function transparentGifBuffer(): Buffer {
 }
 
 export function injectTrackingPixel(html: string, trackingUrl: string): string {
-  const pixel = `<img src="${trackingUrl}" width="1" height="1" style="display:none;" />`;
+  const pixel = `<img src="${trackingUrl}" alt="" width="1" height="1" style="display:none;" />`;
   return html.includes("</body>") ? html.replace("</body>", `${pixel}</body>`) : `${html}${pixel}`;
 }

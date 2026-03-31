@@ -21,7 +21,7 @@ const envSchema = z.object({
   /** Set to "true" when calling Mailcow over HTTPS with a self-signed cert (e.g. SSH tunnel to localhost). */
   MAILCOW_TLS_INSECURE: z.enum(["true", "false"]).optional(),
   APP_DOMAIN: z.string().default("dockmail.app"),
-  API_URL: z.string().optional(),
+  API_URL: z.string().default("https://api.dockmail.app"),
   INBOUND_MX_HOST: z.string().default("mail.dockmail.app"),
   /** IMAP host for inbound sync (defaults to INBOUND_MX_HOST / Mailcow). */
   IMAP_HOST: z.string().optional(),
@@ -34,7 +34,9 @@ const envSchema = z.object({
   IMAP_INITIAL_SYNC_LIMIT: z.coerce.number().default(50),
   TRACKING_PIXEL_URL: z.string().default("https://api.dockmail.app/v1/track/open"),
   TRACKING_LINK_URL: z.string().default("https://api.dockmail.app/v1/track/click"),
-  DKIM_SELECTOR: z.string().default("default"),
+  DKIM_SELECTOR: z.string().default("dkim"),
+  /** Optional: set Mailcow DKIM public key so addDomain can return exact TXT value. */
+  DKIM_PUBLIC_KEY: z.string().optional(),
   UPLOAD_DIR: z.string().default("./uploads"),
   MAX_FILE_SIZE: z.coerce.number().default(26214400),
   PRICE_PER_MAILBOX: z.coerce.number().default(1),

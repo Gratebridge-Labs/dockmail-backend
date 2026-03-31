@@ -84,7 +84,12 @@ export async function performSend(mailboxId: string, emailId: string) {
     email.threadId ?? (await resolveThreadId(mailboxId, email.inReplyTo ?? undefined, email.references ?? []));
 
   const trackingId = email.trackingId ?? crypto.randomUUID();
-  const trackingUrl = `${env.TRACKING_PIXEL_URL}/${trackingId}`;
+  const trackingBase = env.TRACKING_PIXEL_URL.trim();
+  const normalizedBase =
+    /^https?:\/\//i.test(trackingBase)
+      ? trackingBase
+      : `${(env.API_URL ?? "").replace(/\/$/, "")}/${trackingBase.replace(/^\/+/, "")}`;
+  const trackingUrl = `${normalizedBase.replace(/\/$/, "")}/${trackingId}`;
   const bodyHtml = injectTrackingPixel(email.bodyHtml, trackingUrl);
 
   const from = email.mailbox.email;

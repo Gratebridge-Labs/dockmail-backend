@@ -9,6 +9,14 @@ function normalizeDomain(value: string) {
   return value.trim().toLowerCase();
 }
 
+function dkimTxtValue() {
+  if (env.DKIM_PUBLIC_KEY && env.DKIM_PUBLIC_KEY.trim()) {
+    const key = env.DKIM_PUBLIC_KEY.trim();
+    return key.startsWith("v=DKIM1") ? key : `v=DKIM1; p=${key}`;
+  }
+  return "v=DKIM1; p=<mailcow-public-key>";
+}
+
 export async function listDomains(workspaceId: string) {
   return prisma.domain.findMany({ where: { workspaceId }, orderBy: { createdAt: "desc" } });
 }
@@ -33,10 +41,19 @@ export async function addDomain(workspaceId: string, domainRaw: string) {
     { type: "MX", name: "@", value: env.INBOUND_MX_HOST, priority: 10 },
     { type: "TXT", name: "@", value: "v=spf1 mx -all" },
     { type: "TXT", name: "_dmarc", value: `v=DMARC1; p=none; rua=mailto:dmarc@${domain}; fo=1` },
-    { type: "TXT", name: `${env.DKIM_SELECTOR}._domainkey`, value: "v=DKIM1; p=<mailcow-public-key>" },
+    { type: "TXT", name: `${env.DKIM_SELECTOR}._domainkey`, value: dkimTxtValue() },
   ];
 
-  return { domain: record, dnsRecords };
+  return {
+    domain: record,
+    dnsRecords,
+    guidance: {
+      dkim:
+        dnsRecords[3].value.includes("<mailcow-public-key>")
+          ? "Set DKIM_PUBLIC_KEY in backend env (or copy exact DKIM TXT from Mailcow DNS helper) so this endpoint returns your real public key."
+          : "DKIM TXT value is provided from DKIM_PUBLIC_KEY env.",
+    },
+  };
 }
 
 export async function getDomain(workspaceId: string, domainId: string) {
