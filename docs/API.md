@@ -53,13 +53,25 @@
 
 ## POST /v1/workspaces/:workspaceId/domains
 
-**Description:** Add tenant domain and return SES + inbound DNS instructions.
+**Description:** Add tenant domain and return Mailcow SMTP/inbound DNS instructions.
 
 **Auth required:** Yes (ADMIN/OWNER)
 
 ## POST /v1/workspaces/:workspaceId/domains/:domainId/verify
 
-**Description:** Verify MX/SPF/DKIM/DMARC status using DNS + SES identity.
+**Description:** Verify MX/SPF/DKIM/DMARC status using DNS records.
+
+**Auth required:** Yes (ADMIN/OWNER)
+
+## DELETE /v1/workspaces/:workspaceId/domains/:domainId/reset?confirm=true
+
+**Description:** Delete domain and all related data (mailboxes, emails, attachments) for a clean re-onboarding test.
+
+**Auth required:** Yes (ADMIN/OWNER)
+
+## DELETE /v1/workspaces/:workspaceId/domains/:domainId/reset?confirm=true
+
+**Description:** Delete a domain and all related mailboxes/emails/attachments for a clean reset test.
 
 **Auth required:** Yes (ADMIN/OWNER)
 
@@ -83,7 +95,7 @@
 
 ## POST /v1/mailboxes/:mailboxId/emails/:emailId/send
 
-**Description:** Send or schedule draft via Amazon SES.
+**Description:** Send or schedule draft via SMTP.
 
 **Auth required:** Yes
 

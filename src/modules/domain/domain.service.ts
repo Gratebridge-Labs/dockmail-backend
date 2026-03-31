@@ -1,10 +1,9 @@
-import { CreateEmailIdentityCommand, GetEmailIdentityCommand } from "@aws-sdk/client-sesv2";
 import { prisma } from "../../config/database";
 import { env } from "../../config/env";
 import { logger } from "../../config/logger";
-import { ensureMailcowDomain } from "../../config/mailcow";
-import { sesClient } from "../../config/ses";
+import { deleteMailcowDomain, deleteMailcowMailbox, ensureMailcowDomain } from "../../config/mailcow";
 import { hasMxRecord, hasTxtContains } from "../../utils/dns";
+import fs from "node:fs";
 
 function normalizeDomain(value: string) {
   return value.trim().toLowerCase();
@@ -19,45 +18,22 @@ export async function addDomain(workspaceId: string, domainRaw: string) {
   const existing = await prisma.domain.findUnique({ where: { domain } });
   if (existing && existing.workspaceId !== workspaceId) throw new Error("CONFLICT");
 
-  const sesIdentity = await sesClient.send(
-    new CreateEmailIdentityCommand({
-      EmailIdentity: domain,
-      DkimSigningAttributes: { NextSigningKeyLength: "RSA_2048_BIT" },
-    }),
-  );
-
   const record = await prisma.domain.upsert({
     where: { domain },
     create: {
       domain,
       workspaceId,
-      sesIdentityArn: sesIdentity.IdentityType,
-      sesMailFromDomain: `bounce.${domain}`,
     },
     update: {
       workspaceId,
-      sesMailFromDomain: `bounce.${domain}`,
     },
   });
 
-  const identity = await sesClient.send(new GetEmailIdentityCommand({ EmailIdentity: domain }));
-  const dkimTokens = identity.DkimAttributes?.Tokens ?? [];
   const dnsRecords = [
     { type: "MX", name: "@", value: env.INBOUND_MX_HOST, priority: 10 },
-    { type: "TXT", name: "@", value: "v=spf1 include:amazonses.com mx -all" },
+    { type: "TXT", name: "@", value: "v=spf1 mx -all" },
     { type: "TXT", name: "_dmarc", value: `v=DMARC1; p=none; rua=mailto:dmarc@${domain}; fo=1` },
-    ...dkimTokens.map((token) => ({
-      type: "CNAME",
-      name: `${token}._domainkey`,
-      value: `${token}.dkim.amazonses.com`,
-    })),
-    {
-      type: "MX",
-      name: "bounce",
-      value: `feedback-smtp.${env.AWS_REGION}.amazonses.com`,
-      priority: 10,
-    },
-    { type: "TXT", name: "bounce", value: "v=spf1 include:amazonses.com ~all" },
+    { type: "TXT", name: `${env.DKIM_SELECTOR}._domainkey`, value: "v=DKIM1; p=<mailcow-public-key>" },
   ];
 
   return { domain: record, dnsRecords };
@@ -84,12 +60,12 @@ export async function verifyDomain(workspaceId: string, domainId: string) {
 
   const [mxVerified, spfVerified, dmarcVerified] = await Promise.all([
     hasMxRecord(domain.domain, env.INBOUND_MX_HOST).catch(() => false),
-    hasTxtContains(domain.domain, "amazonses.com").catch(() => false),
+    hasTxtContains(domain.domain, "v=spf1").catch(() => false),
     hasTxtContains(`_dmarc.${domain.domain}`, "v=DMARC1").catch(() => false),
   ]);
-
-  const sesIdentity = await sesClient.send(new GetEmailIdentityCommand({ EmailIdentity: domain.domain }));
-  const dkimVerified = sesIdentity.VerifiedForSendingStatus ?? false;
+  const dkimVerified = await hasTxtContains(`${env.DKIM_SELECTOR}._domainkey.${domain.domain}`, "v=DKIM1").catch(
+    () => false,
+  );
 
   const verified = mailcowVerified && mxVerified && spfVerified && dkimVerified && dmarcVerified;
   const updated = await prisma.domain.update({
@@ -109,5 +85,68 @@ export async function verifyDomain(workspaceId: string, domainId: string) {
   return {
     domain: updated,
     checks: { mxVerified, spfVerified, dkimVerified, dmarcVerified, mailcowVerified },
+  };
+}
+
+export async function resetDomain(workspaceId: string, domainId: string, confirm: boolean) {
+  if (!confirm) throw new Error("CONFIRM_REQUIRED");
+  const domain = await prisma.domain.findFirst({
+    where: { id: domainId, workspaceId },
+    include: {
+      mailboxes: {
+        include: {
+          emails: {
+            include: {
+              attachments: {
+                select: { id: true, storagePath: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!domain) throw new Error("NOT_FOUND");
+
+  const mailboxCount = domain.mailboxes.length;
+  const emailCount = domain.mailboxes.reduce((sum, mb) => sum + mb.emails.length, 0);
+  const attachments = domain.mailboxes.flatMap((mb) => mb.emails.flatMap((em) => em.attachments));
+  const attachmentCount = attachments.length;
+
+  for (const att of attachments) {
+    if (!att.storagePath) continue;
+    try {
+      if (fs.existsSync(att.storagePath)) fs.unlinkSync(att.storagePath);
+    } catch (e) {
+      logger.warn(
+        `resetDomain: failed to delete attachment file ${att.id} (${att.storagePath}) — ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+
+  for (const mb of domain.mailboxes) {
+    try {
+      await deleteMailcowMailbox(mb.email);
+    } catch (e) {
+      logger.warn(
+        `resetDomain: deleteMailcowMailbox failed for ${mb.email} — ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+  try {
+    await deleteMailcowDomain(domain.domain);
+  } catch (e) {
+    logger.warn(`resetDomain: deleteMailcowDomain failed for ${domain.domain} — ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  await prisma.domain.delete({ where: { id: domain.id } });
+  return {
+    deleted: true,
+    domain: domain.domain,
+    counts: {
+      mailboxes: mailboxCount,
+      emails: emailCount,
+      attachments: attachmentCount,
+    },
   };
 }

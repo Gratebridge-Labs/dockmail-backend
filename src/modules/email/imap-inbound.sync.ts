@@ -8,16 +8,12 @@ import { env } from "../../config/env";
 import { logger } from "../../config/logger";
 import { io } from "../../config/socket";
 import { attachmentPath } from "../attachment/attachment.service";
+import { normalizeMessageId, resolveThreadId } from "./threading";
 
 type MailboxRow = Prisma.MailboxGetPayload<{ include: { domain: true } }>;
 
 function imapHost() {
   return env.IMAP_HOST ?? env.INBOUND_MX_HOST;
-}
-
-function normalizeMessageId(raw: string | undefined): string | undefined {
-  if (!raw) return undefined;
-  return raw.replace(/^<|>$/g, "").trim() || undefined;
 }
 
 function formatAddresses(list: AddressObject | AddressObject[] | undefined): string[] {
@@ -81,6 +77,7 @@ async function persistInboundEmail(mb: MailboxRow, uid: number, raw: Buffer) {
   const inReplyTo = normalizeMessageId(
     typeof parsed.inReplyTo === "string" ? parsed.inReplyTo : parsed.inReplyTo?.[0],
   );
+  const threadId = await resolveThreadId(mb.id, inReplyTo, references);
 
   let sizeBytes = Buffer.byteLength(bodyHtml, "utf8");
   for (const a of parsed.attachments) {
@@ -105,6 +102,7 @@ async function persistInboundEmail(mb: MailboxRow, uid: number, raw: Buffer) {
       messageId: msgId,
       inReplyTo,
       references,
+      threadId,
       isDraft: false,
       isRead: false,
       receivedAt: parsed.date ?? new Date(),
@@ -268,8 +266,8 @@ function createImapClient(mb: MailboxRow) {
     // Keep finite socket timeout to avoid stale hung connections.
     socketTimeout: 5 * 60 * 1000,
     connectionTimeout: 90_000,
-    // Restart IDLE periodically to reduce long-read timeout risk.
-    maxIdleTime: 4 * 60 * 1000,
+    // Shorter IDLE cycle keeps worst-case inbox lag low.
+    maxIdleTime: 60 * 1000,
   });
 }
 
@@ -292,9 +290,10 @@ async function runMailboxSession(mb: MailboxRow) {
       await client.connect();
       lock = await client.getMailboxLock("INBOX");
       let syncing = false;
-      const safeSync = async () => {
+      const safeSync = async (reason: string) => {
         if (syncing) return;
         syncing = true;
+        logger.info(`${label} sync:start reason=${reason}`);
         try {
           await syncInbox(client, mb);
           const latest = await prisma.mailbox.findUnique({
@@ -302,9 +301,10 @@ async function runMailboxSession(mb: MailboxRow) {
             include: { domain: true },
           });
           if (latest) mb = latest;
+          logger.info(`${label} sync:done reason=${reason}`);
         } catch (e) {
           logger.error(
-            `${label} sync error — ${e instanceof Error ? e.message : String(e)}`,
+            `${label} sync:error reason=${reason} — ${e instanceof Error ? e.message : String(e)}`,
             e instanceof Error ? e : undefined,
           );
         } finally {
@@ -312,12 +312,21 @@ async function runMailboxSession(mb: MailboxRow) {
         }
       };
 
-      await safeSync();
+      await safeSync("session-start");
+
+      client.on("exists", () => {
+        void safeSync("exists-event");
+      });
+
+      const poll = setInterval(() => {
+        void safeSync("poll");
+      }, 15_000);
 
       while (client.usable) {
         try {
+          logger.info(`${label} idle:waiting`);
           await client.idle();
-          await safeSync();
+          await safeSync("idle-return");
         } catch (e) {
           logger.warn(
             `${label} idle loop interrupted — ${e instanceof Error ? e.message : String(e)}`,
@@ -326,6 +335,7 @@ async function runMailboxSession(mb: MailboxRow) {
           break;
         }
       }
+      clearInterval(poll);
     } catch (e) {
       logger.error(
         `${label} session error — ${e instanceof Error ? e.message : String(e)}`,

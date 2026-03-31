@@ -43,7 +43,7 @@ function postJson(urlString: string, headers: Record<string, string>, body: stri
  * like `domain`, `local_part` — not a one-element array `[{ ... }]`, which would set `$attr[0]`
  * and leave `$attr.domain` unset (domain_invalid / mailbox_invalid).
  */
-async function mailcowRequest(path: string, payload: Record<string, unknown>): Promise<string> {
+async function mailcowRequest(path: string, payload: unknown): Promise<string> {
   if (!env.MAILCOW_API_URL || !env.MAILCOW_API_KEY) {
     throw new Error("Mailcow is not configured (MAILCOW_API_URL / MAILCOW_API_KEY)");
   }
@@ -79,7 +79,7 @@ async function mailcowRequest(path: string, payload: Record<string, unknown>): P
 /** Mailcow returns HTTP 200 with JSON body; failures use type "danger" / "error". */
 function assertMailcowSuccess(
   body: string,
-  opts?: { ignoreDomainExists?: boolean; ignoreMailboxExists?: boolean },
+  opts?: { ignoreDomainExists?: boolean; ignoreMailboxExists?: boolean; ignoreMissing?: boolean },
 ) {
   let data: unknown;
   try {
@@ -106,6 +106,9 @@ function assertMailcowSuccess(
           return;
         }
         if (opts?.ignoreMailboxExists && /mailbox_exists|mailbox_duplicate|object_exists|already exists|duplicate/i.test(text)) {
+          return;
+        }
+        if (opts?.ignoreMissing && /not found|does not exist|unknown/i.test(text)) {
           return;
         }
         throw new Error(text || "Mailcow rejected the request");
@@ -158,4 +161,16 @@ export async function addMailcowMailbox(input: {
   });
 
   assertMailcowSuccess(resBody, { ignoreMailboxExists: true });
+}
+
+export async function deleteMailcowMailbox(emailAddress: string) {
+  if (!env.MAILCOW_API_URL || !env.MAILCOW_API_KEY) return;
+  const resBody = await mailcowRequest("/api/v1/delete/mailbox", [emailAddress]);
+  assertMailcowSuccess(resBody, { ignoreMissing: true });
+}
+
+export async function deleteMailcowDomain(domainName: string) {
+  if (!env.MAILCOW_API_URL || !env.MAILCOW_API_KEY) return;
+  const resBody = await mailcowRequest("/api/v1/delete/domain", [domainName]);
+  assertMailcowSuccess(resBody, { ignoreMissing: true });
 }

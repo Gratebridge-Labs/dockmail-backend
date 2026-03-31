@@ -4,6 +4,7 @@ import { env } from "../../config/env";
 import { logger } from "../../config/logger";
 import { sendAppEmail } from "../../config/ses";
 import { injectTrackingPixel } from "../../utils/tracking";
+import { resolveThreadId } from "./threading";
 
 export async function listEmails(mailboxId: string, folder?: string) {
   return prisma.email.findMany({
@@ -17,6 +18,7 @@ export async function listEmails(mailboxId: string, folder?: string) {
 export async function createDraft(mailboxId: string, input: any) {
   const mailbox = await prisma.mailbox.findFirst({ where: { id: mailboxId } });
   if (!mailbox) throw new Error("NOT_FOUND");
+  const threadId = await resolveThreadId(mailboxId, input.inReplyTo, input.references ?? []);
 
   return prisma.email.create({
     data: {
@@ -32,6 +34,7 @@ export async function createDraft(mailboxId: string, input: any) {
       replyTo: input.replyTo,
       inReplyTo: input.inReplyTo,
       references: input.references,
+      threadId,
       isDraft: true,
       status: "DRAFT",
       readReceiptEnabled: input.readReceiptEnabled,
@@ -77,6 +80,8 @@ export async function performSend(mailboxId: string, emailId: string) {
   });
   if (!email) throw new Error("NOT_FOUND");
   if (!email.toAddresses.length || !email.subject) throw new Error("VALIDATION");
+  const resolvedThreadId =
+    email.threadId ?? (await resolveThreadId(mailboxId, email.inReplyTo ?? undefined, email.references ?? []));
 
   const trackingId = email.trackingId ?? crypto.randomUUID();
   const trackingUrl = `${env.TRACKING_PIXEL_URL}/${trackingId}`;
@@ -110,6 +115,7 @@ export async function performSend(mailboxId: string, emailId: string) {
       fromName: email.mailbox.displayName ?? undefined,
       trackingId,
       messageId: messageId ?? undefined,
+      threadId: resolvedThreadId,
     },
   });
 }

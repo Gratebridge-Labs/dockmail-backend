@@ -1,18 +1,18 @@
-import { SESv2Client, SendEmailCommand } from "@aws-sdk/client-sesv2";
+import nodemailer from "nodemailer";
 import { env } from "./env";
 
-const sesConfig =
-  env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY
-    ? {
-        region: env.AWS_REGION,
-        credentials: {
-          accessKeyId: env.AWS_ACCESS_KEY_ID,
-          secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
-        },
-      }
-    : { region: env.AWS_REGION };
-
-export const sesClient = new SESv2Client(sesConfig);
+const smtpConfigured = !!(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS);
+const transporter = smtpConfigured
+  ? nodemailer.createTransport({
+      host: env.SMTP_HOST,
+      port: env.SMTP_PORT,
+      secure: env.SMTP_SECURE === "true",
+      auth: {
+        user: env.SMTP_USER,
+        pass: env.SMTP_PASS,
+      },
+    })
+  : null;
 
 export interface SendAppEmailInput {
   from: string;
@@ -24,22 +24,18 @@ export interface SendAppEmailInput {
 }
 
 export async function sendAppEmail(input: SendAppEmailInput): Promise<string | undefined> {
-  const command = new SendEmailCommand({
-    FromEmailAddress: input.from,
-    Destination: { ToAddresses: input.to },
-    Content: {
-      Simple: {
-        Subject: { Data: input.subject, Charset: "UTF-8" },
-        Body: {
-          Html: { Data: input.html, Charset: "UTF-8" },
-          ...(input.text ? { Text: { Data: input.text, Charset: "UTF-8" } } : {}),
-        },
-      },
-    },
-    ReplyToAddresses: input.replyTo ? [input.replyTo] : undefined,
-    ConfigurationSetName: env.SES_CONFIGURATION_SET || undefined,
+  if (!transporter) {
+    throw new Error("SMTP is not configured (SMTP_HOST / SMTP_USER / SMTP_PASS)");
+  }
+
+  const info = await transporter.sendMail({
+    from: input.from,
+    to: input.to.join(","),
+    subject: input.subject,
+    html: input.html,
+    text: input.text,
+    replyTo: input.replyTo,
   });
 
-  const response = await sesClient.send(command);
-  return response.MessageId;
+  return info.messageId;
 }

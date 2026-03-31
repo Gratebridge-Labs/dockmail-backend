@@ -3,7 +3,7 @@ import { requireAuth } from "../../middleware/auth";
 import { requireRole } from "../../middleware/role";
 import { validate } from "../../middleware/validate";
 import * as controller from "./domain.controller";
-import { createDomainSchema } from "./domain.schema";
+import { createDomainSchema, resetDomainSchema } from "./domain.schema";
 
 export const domainRouter = Router({ mergeParams: true });
 
@@ -12,3 +12,4 @@ domainRouter.get("/", requireRole("MEMBER", "ADMIN", "OWNER"), controller.listDo
 domainRouter.post("/", requireRole("ADMIN", "OWNER"), validate({ body: createDomainSchema }), controller.addDomain);
 domainRouter.get("/:domainId", requireRole("MEMBER", "ADMIN", "OWNER"), controller.getDomain);
 domainRouter.post("/:domainId/verify", requireRole("ADMIN", "OWNER"), controller.verifyDomain);
+domainRouter.delete("/:domainId/reset", requireRole("ADMIN", "OWNER"), validate({ query: resetDomainSchema }), controller.resetDomain);
