@@ -6,13 +6,77 @@ import { sendAppEmail } from "../../config/ses";
 import { injectTrackingPixel } from "../../utils/tracking";
 import { resolveThreadId } from "./threading";
 
-export async function listEmails(mailboxId: string, folder?: string) {
-  return prisma.email.findMany({
-    where: { mailboxId, ...(folder ? { folder: folder as never } : {}) },
-    include: { attachments: true },
-    orderBy: { createdAt: "desc" },
-    take: 50,
-  });
+interface ListEmailsOptions {
+  folder?: string;
+  status?: string;
+  isRead?: boolean;
+  isStarred?: boolean;
+  isDraft?: boolean;
+  search?: string;
+  fromAddress?: string;
+  toAddress?: string;
+  dateFrom?: Date;
+  dateTo?: Date;
+  page?: number;
+  perPage?: number;
+}
+
+export async function listEmails(mailboxId: string, options: ListEmailsOptions = {}) {
+  const page = Math.max(1, options.page ?? 1);
+  const perPage = Math.min(50, Math.max(1, options.perPage ?? 50));
+  const skip = (page - 1) * perPage;
+
+  const where: Record<string, unknown> = {
+    mailboxId,
+    ...(options.folder ? { folder: options.folder } : {}),
+    ...(options.status ? { status: options.status } : {}),
+    ...(typeof options.isRead === "boolean" ? { isRead: options.isRead } : {}),
+    ...(typeof options.isStarred === "boolean" ? { isStarred: options.isStarred } : {}),
+    ...(typeof options.isDraft === "boolean" ? { isDraft: options.isDraft } : {}),
+    ...(options.fromAddress ? { fromAddress: { contains: options.fromAddress, mode: "insensitive" } } : {}),
+    ...(options.toAddress ? { toAddresses: { has: options.toAddress } } : {}),
+  };
+
+  if (options.dateFrom || options.dateTo) {
+    where.createdAt = {
+      ...(options.dateFrom ? { gte: options.dateFrom } : {}),
+      ...(options.dateTo ? { lte: options.dateTo } : {}),
+    };
+  }
+
+  if (options.search && options.search.trim()) {
+    where.OR = [
+      { subject: { contains: options.search, mode: "insensitive" } },
+      { fromAddress: { contains: options.search, mode: "insensitive" } },
+      { bodyText: { contains: options.search, mode: "insensitive" } },
+      { bodyHtml: { contains: options.search, mode: "insensitive" } },
+      { toAddresses: { has: options.search.trim() } },
+    ];
+  }
+
+  const [total, items] = await Promise.all([
+    prisma.email.count({ where }),
+    prisma.email.findMany({
+      where,
+      include: { attachments: true },
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: perPage,
+    }),
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  return {
+    items,
+    meta: {
+      page,
+      perPage,
+      total,
+      totalPages,
+      hasNextPage: page < totalPages,
+      hasPrevPage: page > 1,
+    },
+  };
 }
 
 export async function createDraft(mailboxId: string, input: any) {

@@ -134,7 +134,7 @@ export async function verifyRegisterOtp(input: { email: string; otp: string }) {
     firstName: user.fullName.split(" ")[0] ?? user.fullName,
     email: user.email,
     workspaceName: activeWorkspace?.name ?? "Dockmail Workspace",
-  }).catch(() => null);
+  });
 
   return {
     user: { id: user.id, email: user.email, fullName: user.fullName, emailVerified: true },
@@ -171,7 +171,7 @@ export async function resendVerifyEmail(email: string) {
     timestamp: new Date().toISOString(),
     deviceInfo: "Email verification",
     location: "Unknown",
-  }).catch(() => null);
+  });
 }
 
 export async function forgotPassword(email: string) {
@@ -192,7 +192,7 @@ export async function forgotPassword(email: string) {
     resetUrl: resetPasswordUrl(token),
     timestamp: new Date().toISOString(),
     expiryTime: expiry.toISOString(),
-  }).catch(() => null);
+  });
 }
 
 export async function resetPassword(input: { token: string; password: string }) {
@@ -216,7 +216,7 @@ export async function resetPassword(input: { token: string; password: string }) 
     changedAt: new Date().toISOString(),
     deviceInfo: "Unknown device",
     location: "Unknown",
-  }).catch(() => null);
+  });
 }
 
 export async function loginUser(input: { email: string; password: string; workspaceSlug?: string }) {
@@ -251,7 +251,7 @@ export async function loginUser(input: { email: string; password: string; worksp
       timestamp: new Date().toISOString(),
       deviceInfo: "Login verification",
       location: "Unknown",
-    }).catch(() => null);
+    });
     throw new Error(`EMAIL_NOT_VERIFIED:${user.email}`);
   }
 

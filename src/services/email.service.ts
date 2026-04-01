@@ -1,5 +1,6 @@
 import { sendAppEmail } from "../config/ses";
 import { env } from "../config/env";
+import { logger } from "../config/logger";
 import { renderSystemTemplate, SystemEmailTemplate, TemplateVariables } from "../templates";
 
 type SenderRole = "noreply" | "support" | "billing" | "security";
@@ -7,7 +8,7 @@ type SenderRole = "noreply" | "support" | "billing" | "security";
 const senderByTemplate: Record<SystemEmailTemplate, SenderRole> = {
   "welcome": "noreply",
   "verify-email": "noreply",
-  "otp": "security",
+  "otp": "noreply",
   "reset-password": "security",
   "invite-member": "support",
   "invite-accepted": "support",
@@ -56,19 +57,29 @@ export async function sendSystemEmail(
   const from = `Dockmail <${fromAddress}>`;
   const authPass = env.SYSTEM_MAILBOX_SHARED_PASS || env.SMTP_PASS;
 
-  await sendAppEmail({
-    from,
-    to: [to],
-    subject: template.subject,
-    html: template.html,
-    text: template.text,
-    smtpAuth: authPass
-      ? {
-          user: fromAddress,
-          pass: authPass,
-        }
-      : undefined,
-  });
+  try {
+    await sendAppEmail({
+      from,
+      to: [to],
+      subject: template.subject,
+      html: template.html,
+      text: template.text,
+      smtpAuth: authPass
+        ? {
+            user: fromAddress,
+            pass: authPass,
+          }
+        : undefined,
+    });
+  } catch (error) {
+    logger.error(
+      `sendSystemEmail failed template=${templateName} to=${to} sender=${fromAddress}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+      error instanceof Error ? error : undefined,
+    );
+    throw error;
+  }
 }
 
 export type { SystemEmailTemplate };

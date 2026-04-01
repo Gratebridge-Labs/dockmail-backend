@@ -2,11 +2,11 @@ import { alert, button, divider, h1, info, p } from "../components.template";
 import { get, TemplateBuilder } from "./template.types";
 
 function small(text: string) {
-  return `<p class="small-link">${text}</p>`;
+  return `<p class="small-link" style="font-size:13px;color:#555555;line-height:1.6;margin:0 0 12px 0;">${text}</p>`;
 }
 
 function code(value: string) {
-  return `<p class="code-block">${value}</p>`;
+  return `<p class="code-block" style="font-family:'Courier New',monospace;font-size:13px;background:#1a1a1a;border:1px solid #1f1f1f;border-radius:4px;padding:8px;color:#4f8ef7;word-break:break-all;margin:0 0 12px 0;">${value}</p>`;
 }
 
 function list(items: string[]) {
@@ -52,7 +52,7 @@ export const buildOtpTemplate: TemplateBuilder = (v) => ({
   content:
     h1("Your verification code") +
     p("Enter this code to complete your sign-in. It expires in 10 minutes.") +
-    `<div class="info-box"><div class="otp-code">${plain(get(v, "code")).replace(/\D/g, "").slice(0, 6).split("").join(" ")}</div></div>` +
+    `<div class="info-box" style="background:#0f0f0f;border:1px solid #1f1f1f;border-radius:8px;padding:18px 20px;margin:20px 0;"><div class="otp-code" style="font-family:'Courier New',monospace;font-size:42px;font-weight:700;letter-spacing:10px;color:#ededed;text-align:center;padding:28px 0;white-space:nowrap;">${plain(get(v, "code")).replace(/\D/g, "").slice(0, 6).split("").join(" ")}</div></div>` +
     alert("Never share this code with anyone. Dockmail will never ask for it.", "warning") +
     divider() +
     info([

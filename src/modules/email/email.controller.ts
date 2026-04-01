@@ -3,8 +3,28 @@ import { fail, ok } from "../../utils/response";
 import * as service from "./email.service";
 import { queueScheduledSend, queueSend } from "./email.queue";
 
+function parseBoolean(value: unknown): boolean | undefined {
+  if (typeof value !== "string") return undefined;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return undefined;
+}
+
 export async function listEmails(req: Request, res: Response) {
-  const data = await service.listEmails(String(req.params.mailboxId), req.query.folder as string | undefined);
+  const data = await service.listEmails(String(req.params.mailboxId), {
+    folder: typeof req.query.folder === "string" ? req.query.folder : undefined,
+    status: typeof req.query.status === "string" ? req.query.status : undefined,
+    isRead: parseBoolean(req.query.isRead),
+    isStarred: parseBoolean(req.query.isStarred),
+    isDraft: parseBoolean(req.query.isDraft),
+    search: typeof req.query.search === "string" ? req.query.search : undefined,
+    fromAddress: typeof req.query.fromAddress === "string" ? req.query.fromAddress : undefined,
+    toAddress: typeof req.query.toAddress === "string" ? req.query.toAddress : undefined,
+    dateFrom: typeof req.query.dateFrom === "string" ? new Date(req.query.dateFrom) : undefined,
+    dateTo: typeof req.query.dateTo === "string" ? new Date(req.query.dateTo) : undefined,
+    page: typeof req.query.page === "string" ? Number(req.query.page) : undefined,
+    perPage: typeof req.query.perPage === "string" ? Number(req.query.perPage) : 50,
+  });
   return ok(res, data);
 }
 

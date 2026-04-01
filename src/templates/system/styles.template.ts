@@ -1,7 +1,6 @@
 export const systemEmailStyles = `
-  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap');
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background-color: #0a0a0a !important; font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; -webkit-font-smoothing: antialiased; color: #888888; margin: 0; padding: 0; }
+  body { background-color: #0a0a0a !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #888888; margin: 0; padding: 0; }
   a { color: #4f8ef7; text-decoration: none; }
   .wrapper { width: 100%; background-color: #0a0a0a !important; padding: 48px 16px; }
   .container { max-width: 600px; margin: 0 auto; background-color: #111111 !important; border: 1px solid #1f1f1f; border-radius: 12px; overflow: hidden; }
