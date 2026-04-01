@@ -8,7 +8,13 @@ import { env } from "../../config/env";
 import { logger } from "../../config/logger";
 import { io } from "../../config/socket";
 import { attachmentPath } from "../attachment/attachment.service";
-import { normalizeMessageId, resolveThreadId } from "./threading";
+import { normalizeMessageId, normalizeReferencesList, resolveThreadId } from "./threading";
+
+const SYSTEM_SENDER_ADDRESSES = new Set([
+  "noreply@dockmail.app",
+  "system@dockmail.app",
+  "no-reply@dockmail.app",
+]);
 
 type MailboxRow = Prisma.MailboxGetPayload<{ include: { domain: true } }>;
 
@@ -56,6 +62,15 @@ async function persistInboundEmail(mb: MailboxRow, uid: number, raw: Buffer) {
   }
 
   const from = firstFrom(parsed);
+  if (SYSTEM_SENDER_ADDRESSES.has(from.address.toLowerCase())) {
+    logger.info(`imap inbound: dropped system sender ${from.address} mailbox=${mb.id} uid=${uid}`);
+    await prisma.mailbox.update({
+      where: { id: mb.id },
+      data: { imapLastUid: uid },
+    });
+    return;
+  }
+
   const toAddresses = formatAddresses(parsed.to);
   const ccAddresses = formatAddresses(parsed.cc);
   const bccAddresses = formatAddresses(parsed.bcc);
@@ -67,17 +82,16 @@ async function persistInboundEmail(mb: MailboxRow, uid: number, raw: Buffer) {
   const bodyText = parsed.text ?? undefined;
   const snippet = (parsed.text || parsed.subject || "").slice(0, 200);
   const referencesRaw = parsed.references;
-  const references = Array.isArray(referencesRaw)
-    ? referencesRaw.map(String)
-    : referencesRaw
-      ? [String(referencesRaw)]
-      : [];
+  const references = normalizeReferencesList(
+    Array.isArray(referencesRaw) ? referencesRaw.map(String) : referencesRaw ? [String(referencesRaw)] : undefined,
+  );
 
   const replyTo = parsed.replyTo?.value?.[0]?.address ?? undefined;
   const inReplyTo = normalizeMessageId(
     typeof parsed.inReplyTo === "string" ? parsed.inReplyTo : parsed.inReplyTo?.[0],
   );
-  const threadId = await resolveThreadId(mb.id, inReplyTo, references);
+  const participants = [from.address, ...toAddresses, ...ccAddresses].filter(Boolean);
+  const threadId = await resolveThreadId(mb.id, inReplyTo, references, subject, participants);
 
   let sizeBytes = Buffer.byteLength(bodyHtml, "utf8");
   for (const a of parsed.attachments) {
@@ -102,13 +116,20 @@ async function persistInboundEmail(mb: MailboxRow, uid: number, raw: Buffer) {
       messageId: msgId,
       inReplyTo,
       references,
-      threadId,
+      threadId: threadId ?? undefined,
       isDraft: false,
       isRead: false,
       receivedAt: parsed.date ?? new Date(),
       sizeBytes,
     },
   });
+
+  if (!threadId) {
+    await prisma.email.update({
+      where: { id: email.id },
+      data: { threadId: email.id },
+    });
+  }
 
   for (const att of parsed.attachments) {
     const filename = sanitizeFilename(att.filename || "attachment");

@@ -11,6 +11,7 @@ function parseBoolean(value: unknown): boolean | undefined {
 }
 
 export async function listEmails(req: Request, res: Response) {
+  const view = req.query.view === "flat" ? "flat" : "threaded";
   const data = await service.listEmails(String(req.params.mailboxId), {
     folder: typeof req.query.folder === "string" ? req.query.folder : undefined,
     status: typeof req.query.status === "string" ? req.query.status : undefined,
@@ -24,6 +25,7 @@ export async function listEmails(req: Request, res: Response) {
     dateTo: typeof req.query.dateTo === "string" ? new Date(req.query.dateTo) : undefined,
     page: typeof req.query.page === "string" ? Number(req.query.page) : undefined,
     perPage: typeof req.query.perPage === "string" ? Number(req.query.perPage) : 50,
+    view,
   });
   return ok(res, data);
 }
@@ -85,6 +87,12 @@ export async function moveEmail(req: Request, res: Response) {
   const folder = req.body.folder || "INBOX";
   await service.moveEmail(String(req.params.mailboxId), String(req.params.emailId), folder);
   return ok(res, { moved: true });
+}
+
+export async function threadByThreadId(req: Request, res: Response) {
+  const data = await service.getThreadByThreadId(String(req.params.mailboxId), String(req.params.threadId));
+  if (!data) return fail(res, "NOT_FOUND", "Thread not found", 404);
+  return ok(res, data);
 }
 
 export async function thread(req: Request, res: Response) {

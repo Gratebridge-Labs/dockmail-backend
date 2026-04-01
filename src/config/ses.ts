@@ -8,6 +8,10 @@ export interface SendAppEmailInput {
   html: string;
   text?: string;
   replyTo?: string;
+  /** Raw Message-ID value for threading (angle brackets optional). */
+  inReplyTo?: string;
+  /** Space-separated list of Message-IDs for References header. */
+  references?: string;
   smtpAuth?: {
     user: string;
     pass: string;
@@ -35,6 +39,8 @@ export async function sendAppEmail(input: SendAppEmailInput): Promise<string | u
     html: input.html,
     text: input.text,
     replyTo: input.replyTo,
+    inReplyTo: input.inReplyTo,
+    references: input.references,
   });
 
   return info.messageId;

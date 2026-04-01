@@ -11,6 +11,7 @@ emailRouter.use(requireAuth);
 emailRouter.use(bindMailboxWorkspace);
 emailRouter.use(requireRole("MEMBER", "ADMIN", "OWNER"));
 emailRouter.get("/", controller.listEmails);
+emailRouter.get("/threads/:threadId", controller.threadByThreadId);
 emailRouter.post("/", validate({ body: createDraftSchema }), controller.createDraft);
 emailRouter.post("/:emailId/send", validate({ body: sendDraftSchema }), controller.sendDraft);
 emailRouter.delete("/:emailId", controller.deleteEmail);
