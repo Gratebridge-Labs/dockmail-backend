@@ -477,7 +477,7 @@ export async function createDraft(mailboxId: string, input: Record<string, unkno
   if (!threadId) {
     return prisma.email.update({
       where: { id: created.id },
-      data: { threadId: created.id },
+      data: { threadId: created.id, folder: "DRAFTS" },
     });
   }
 
@@ -504,6 +504,7 @@ export async function sendDraft(mailboxId: string, emailId: string, scheduledAt?
         status: "SCHEDULED",
         isScheduled: true,
         scheduledAt: new Date(scheduledAt),
+        folder: "DRAFTS",
         ...fromData,
       },
     });
@@ -511,7 +512,7 @@ export async function sendDraft(mailboxId: string, emailId: string, scheduledAt?
 
   return prisma.email.update({
     where: { id: email.id },
-    data: { status: "QUEUED", isScheduled: false, ...fromData },
+    data: { status: "QUEUED", isScheduled: false, folder: "DRAFTS", ...fromData },
   });
 }
 
