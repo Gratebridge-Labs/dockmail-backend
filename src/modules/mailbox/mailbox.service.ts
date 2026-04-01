@@ -11,12 +11,38 @@ function genMailboxPassword() {
   return crypto.randomBytes(24).toString("hex");
 }
 
+async function enrichMailboxAssignments(
+  mailbox: { assignments?: Array<{ userId: string; assignedById: string }> } & Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const assignments = mailbox.assignments ?? [];
+  if (!assignments.length) {
+    return { ...mailbox, assignments: [] };
+  }
+
+  const ids = Array.from(new Set(assignments.flatMap((a) => [a.userId, a.assignedById])));
+  const users = await prisma.user.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, email: true, fullName: true, displayName: true, avatarUrl: true },
+  });
+  const byId = new Map(users.map((u) => [u.id, u]));
+
+  return {
+    ...mailbox,
+    assignments: assignments.map((a) => ({
+      ...a,
+      assignedUser: byId.get(a.userId) ?? null,
+      assignedBy: byId.get(a.assignedById) ?? null,
+    })),
+  };
+}
+
 export async function listMailboxes(workspaceId: string) {
-  return prisma.mailbox.findMany({
+  const rows = await prisma.mailbox.findMany({
     where: { workspaceId },
     include: { domain: true, assignments: true },
     orderBy: { createdAt: "desc" },
   });
+  return Promise.all(rows.map((row) => enrichMailboxAssignments(row)));
 }
 
 export async function myMailboxes(workspaceId: string, userId: string) {
@@ -65,7 +91,7 @@ export async function createMailbox(
         e instanceof Error ? e : undefined,
       );
     }
-    return existing;
+    return enrichMailboxAssignments(existing);
   }
 
   const password = genMailboxPassword();
@@ -98,7 +124,7 @@ export async function createMailbox(
         where: { email },
         include: mailboxInclude,
       });
-      if (again) return again;
+      if (again) return enrichMailboxAssignments(again);
     }
     throw e;
   }
@@ -132,7 +158,7 @@ export async function createMailbox(
     }
   }
 
-  return mailbox;
+  return enrichMailboxAssignments(mailbox);
 }
 
 export async function assignMailbox(mailboxId: string, userId: string, assignedById: string) {
@@ -229,7 +255,7 @@ export async function reviewMailboxRequest(
     ]);
     if (requester) {
       await sendSystemEmail(requester.email, "mailbox-request-approved", {
-        requestedEmail: mailbox.email,
+        requestedEmail: String((mailbox as { email?: unknown }).email ?? ""),
         approvedByName: reviewer?.fullName ?? "Workspace Admin",
         approvedAt: new Date().toISOString(),
         reviewNote: input.reviewNote ?? "",
