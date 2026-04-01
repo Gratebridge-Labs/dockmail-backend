@@ -121,11 +121,15 @@ export async function verifyDomain(workspaceId: string, domainId: string) {
 
   const dkimTxt = await resolveDkimTxtForDomain(domain.domain);
 
-  const [mxVerified, spfVerified, dmarcVerified] = await Promise.all([
-    hasMxRecord(domain.domain, env.INBOUND_MX_HOST).catch(() => false),
-    hasTxtContains(domain.domain, "v=spf1").catch(() => false),
-    hasTxtContains(`_dmarc.${domain.domain}`, "v=DMARC1").catch(() => false),
+  const [mxRaw, txtRootRaw, txtDmarcRaw, txtDkimRaw] = await Promise.all([
+    dns.resolveMx(domain.domain).catch(() => [] as Array<{ exchange: string; priority: number }>),
+    dns.resolveTxt(domain.domain).catch(() => [] as string[][]),
+    dns.resolveTxt(`_dmarc.${domain.domain}`).catch(() => [] as string[][]),
+    dns.resolveTxt(`${env.DKIM_SELECTOR}._domainkey.${domain.domain}`).catch(() => [] as string[][]),
   ]);
+  const mxVerified = await hasMxRecord(domain.domain, env.INBOUND_MX_HOST).catch(() => false);
+  const spfVerified = await hasTxtContains(domain.domain, "v=spf1").catch(() => false);
+  const dmarcVerified = await hasTxtContains(`_dmarc.${domain.domain}`, "v=DMARC1").catch(() => false);
   const dkimHost = `${env.DKIM_SELECTOR}._domainkey.${domain.domain}`;
   const expectedDkimKey = normalizeDkimPublicKey(dkimTxt);
   const dkimVerified = expectedDkimKey
@@ -135,12 +139,6 @@ export async function verifyDomain(workspaceId: string, domainId: string) {
   const verified = mailcowVerified && mxVerified && spfVerified && dkimVerified && dmarcVerified;
   if (!verified) {
     try {
-      const [mxRaw, spfRaw, dmarcRaw, dkimRaw] = await Promise.all([
-        dns.resolveMx(domain.domain).catch(() => []),
-        dns.resolveTxt(domain.domain).catch(() => []),
-        dns.resolveTxt(`_dmarc.${domain.domain}`).catch(() => []),
-        dns.resolveTxt(`${env.DKIM_SELECTOR}._domainkey.${domain.domain}`).catch(() => []),
-      ]);
       logger.warn(
         `verifyDomain failed domain=${domain.domain} expectedMX=${env.INBOUND_MX_HOST} expectedDkimSelector=${env.DKIM_SELECTOR} expectedDkimKeyPrefix=${
           expectedDkimKey?.slice(0, 24) ?? "none"
@@ -152,9 +150,9 @@ export async function verifyDomain(workspaceId: string, domainId: string) {
           dmarcVerified,
         })} raw=${JSON.stringify({
           mx: mxRaw,
-          txtRoot: spfRaw,
-          txtDmarc: dmarcRaw,
-          txtDkim: dkimRaw,
+          txtRoot: txtRootRaw,
+          txtDmarc: txtDmarcRaw,
+          txtDkim: txtDkimRaw,
         })}`,
       );
     } catch (e) {
@@ -199,6 +197,27 @@ export async function verifyDomain(workspaceId: string, domainId: string) {
     domain: updated,
     dnsRecords: buildDnsRecords(domain.domain, dkimTxt),
     checks: { mxVerified, spfVerified, dkimVerified, dmarcVerified, mailcowVerified },
+    diagnostics: {
+      expected: {
+        mxHost: env.INBOUND_MX_HOST,
+        spfContains: "v=spf1",
+        dmarcContains: "v=DMARC1",
+        dkimHost,
+        dkimKeyPrefix: expectedDkimKey?.slice(0, 24) ?? null,
+      },
+      observed: {
+        mx: mxRaw.map((mx) => ({ exchange: mx.exchange, priority: mx.priority })),
+        txtRoot: txtRootRaw.map((r) => r.join("")),
+        txtDmarc: txtDmarcRaw.map((r) => r.join("")),
+        txtDkim: txtDkimRaw.map((r) => r.join("")),
+      },
+      warnings: {
+        duplicateSpf:
+          txtRootRaw.map((r) => r.join("")).filter((v) => /^v=spf1/i.test(v.trim())).length > 1,
+        duplicateDmarc:
+          txtDmarcRaw.map((r) => r.join("")).filter((v) => /^v=DMARC1/i.test(v.trim())).length > 1,
+      },
+    },
   };
 }
 
