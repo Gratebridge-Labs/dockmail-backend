@@ -67,9 +67,19 @@ export async function me(req: Request, res: Response) {
   return ok(res, data);
 }
 
+export async function deleteMe(req: Request, res: Response) {
+  if (!req.user) return fail(res, "UNAUTHORIZED", "Unauthorized", 401);
+  try {
+    await service.deleteUser(req.user.id);
+    return ok(res, { deleted: true });
+  } catch (error) {
+    return mapAuthError(res, error);
+  }
+}
+
 export async function verifyEmail(req: Request, res: Response) {
   try {
-    const data = await service.verifyEmailToken(req.body.token);
+    const data = await service.verifyRegisterOtp(req.body);
     return ok(res, data);
   } catch (error) {
     return mapAuthError(res, error);

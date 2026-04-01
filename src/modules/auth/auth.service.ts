@@ -5,7 +5,6 @@ import { comparePassword, hashPassword } from "../../utils/password";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../../utils/jwt";
 import { slugify } from "../../utils/slugify";
 import { sendSystemEmail } from "../../services/email.service";
-import { env } from "../../config/env";
 
 function authTokens(user: { id: string; email: string; fullName: string }) {
   const accessToken = signAccessToken(user);
@@ -26,7 +25,6 @@ export async function registerUser(input: {
   if (existing?.emailVerified) throw new Error("CONFLICT:Email already registered");
 
   const passwordHash = await hashPassword(input.password);
-  const emailVerifyToken = crypto.randomBytes(24).toString("hex");
   const otp = String(crypto.randomInt(100000, 1000000));
   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
   const slugBase = slugify(input.companyName);
@@ -37,7 +35,6 @@ export async function registerUser(input: {
       data: {
         fullName: input.fullName,
         passwordHash,
-        emailVerifyToken,
         resetToken: otp,
         resetTokenExpiry: otpExpiry,
       },
@@ -49,7 +46,6 @@ export async function registerUser(input: {
           fullName: input.fullName,
           email: input.email,
           passwordHash,
-          emailVerifyToken,
           resetToken: otp,
           resetTokenExpiry: otpExpiry,
         },
@@ -87,10 +83,6 @@ export async function registerUser(input: {
     deviceInfo: "Registration",
     location: "Unknown",
   });
-  await sendSystemEmail(input.email, "verify-email", {
-    verifyUrl: verifyEmailUrl(emailVerifyToken),
-    expiryDate: "in 24 hours",
-  }).catch(() => null);
 
   return {
     status: "OTP_REQUIRED" as const,
@@ -153,29 +145,9 @@ export async function verifyRegisterOtp(input: { email: string; otp: string }) {
   };
 }
 
-function verifyEmailUrl(token: string) {
-  const base = (env.CLIENT_URL || "https://dockmail.app").replace(/\/$/, "");
-  return `${base}/auth/verify-email?token=${token}`;
-}
-
 function resetPasswordUrl(token: string) {
-  const base = (env.CLIENT_URL || "https://dockmail.app").replace(/\/$/, "");
+  const base = "https://dockmail.app";
   return `${base}/auth/reset-password?token=${token}`;
-}
-
-export async function verifyEmailToken(token: string) {
-  const user = await prisma.user.findFirst({
-    where: { emailVerifyToken: token },
-    select: { id: true, email: true, fullName: true, emailVerified: true },
-  });
-  if (!user) throw new Error("TOKEN_INVALID");
-  if (user.emailVerified) return { verified: true };
-
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { emailVerified: true, emailVerifyToken: null },
-  });
-  return { verified: true };
 }
 
 export async function resendVerifyEmail(email: string) {
@@ -185,15 +157,21 @@ export async function resendVerifyEmail(email: string) {
   });
   if (!user || user.emailVerified) return;
 
-  const token = crypto.randomBytes(24).toString("hex");
+  const otp = String(crypto.randomInt(100000, 1000000));
+  const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
   await prisma.user.update({
     where: { id: user.id },
-    data: { emailVerifyToken: token },
+    data: {
+      resetToken: otp,
+      resetTokenExpiry: otpExpiry,
+    },
   });
 
-  await sendSystemEmail(user.email, "verify-email", {
-    verifyUrl: verifyEmailUrl(token),
-    expiryDate: "in 24 hours",
+  await sendSystemEmail(user.email, "otp", {
+    code: otp,
+    timestamp: new Date().toISOString(),
+    deviceInfo: "Email verification",
+    location: "Unknown",
   }).catch(() => null);
 }
 
@@ -326,6 +304,23 @@ export async function me(userId: string) {
       emailVerified: true,
       workspaceMembers: { select: { workspace: { select: { id: true, name: true, slug: true } }, role: true } },
     },
+  });
+}
+
+export async function deleteUser(userId: string) {
+  const owned = await prisma.workspaceMember.findMany({
+    where: { userId, role: Role.OWNER },
+    select: { workspaceId: true },
+  });
+  const ownedWorkspaceIds = owned.map((o) => o.workspaceId);
+
+  await prisma.$transaction(async (tx) => {
+    if (ownedWorkspaceIds.length) {
+      await tx.workspace.deleteMany({
+        where: { id: { in: ownedWorkspaceIds } },
+      });
+    }
+    await tx.user.delete({ where: { id: userId } });
   });
 }
 

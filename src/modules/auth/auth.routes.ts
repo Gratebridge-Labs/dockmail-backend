@@ -28,6 +28,7 @@ authRouter.post("/refresh", validate({ body: refreshSchema }), controller.refres
 authRouter.post("/logout", validate({ body: refreshSchema }), controller.logout);
 authRouter.post("/logout-all", requireAuth, controller.logoutAll);
 authRouter.get("/me", requireAuth, controller.me);
+authRouter.delete("/me", requireAuth, controller.deleteMe);
 authRouter.post("/verify-email", validate({ body: verifyEmailSchema }), controller.verifyEmail);
 authRouter.post(
   "/verify-email/resend",

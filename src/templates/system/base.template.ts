@@ -8,10 +8,12 @@ export function baseTemplate(input: { subject: string; content: string; unsubscr
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="supported-color-schemes" content="dark" />
   <title>${escapeHtml(input.subject)}</title>
   <style>${systemEmailStyles}</style>
 </head>
-<body>
+<body bgcolor="#0a0a0a">
   <div class="wrapper">
     <div class="container">
       <div class="header"><div class="logo"><span>⬡</span>Dockmail</div></div>

@@ -23,7 +23,8 @@ export const verifyRegisterOtpSchema = z.object({
 });
 
 export const verifyEmailSchema = z.object({
-  token: z.string().min(1),
+  email: z.string().email(),
+  otp: z.string().regex(/^\d{6}$/),
 });
 
 export const resendVerifyEmailSchema = z.object({

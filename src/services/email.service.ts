@@ -52,7 +52,8 @@ export async function sendSystemEmail(
 ): Promise<void> {
   const template = renderSystemTemplate(templateName, variables);
   const senderRole = senderByTemplate[templateName];
-  const from = resolveSender(senderRole);
+  const fromAddress = resolveSender(senderRole);
+  const from = `Dockmail <${fromAddress}>`;
   const authPass = env.SYSTEM_MAILBOX_SHARED_PASS || env.SMTP_PASS;
 
   await sendAppEmail({
@@ -63,7 +64,7 @@ export async function sendSystemEmail(
     text: template.text,
     smtpAuth: authPass
       ? {
-          user: from,
+          user: fromAddress,
           pass: authPass,
         }
       : undefined,

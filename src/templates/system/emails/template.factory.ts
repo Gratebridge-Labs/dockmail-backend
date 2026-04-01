@@ -52,7 +52,7 @@ export const buildOtpTemplate: TemplateBuilder = (v) => ({
   content:
     h1("Your verification code") +
     p("Enter this code to complete your sign-in. It expires in 10 minutes.") +
-    `<div class="info-box"><div class="otp-code">${plain(get(v, "code")).split("").join(" ")}</div></div>` +
+    `<div class="info-box"><div class="otp-code">${plain(get(v, "code")).replace(/\D/g, "").slice(0, 6).split("").join(" ")}</div></div>` +
     alert("Never share this code with anyone. Dockmail will never ask for it.", "warning") +
     divider() +
     info([
@@ -60,8 +60,7 @@ export const buildOtpTemplate: TemplateBuilder = (v) => ({
       { label: "From device", value: get(v, "deviceInfo", "Unknown device") },
       { label: "Location", value: get(v, "location", "Unknown") },
     ]) +
-    small("If you didn't request this code, your password may be compromised. Change it immediately.") +
-    button("Change my password", "https://dockmail.app/dashboard/settings/security", "ghost"),
+    small("If you didn't request this code, ignore this email and contact support."),
 });
 export const buildResetPasswordTemplate: TemplateBuilder = (v) => ({
   subject: "Reset your Dockmail password",
