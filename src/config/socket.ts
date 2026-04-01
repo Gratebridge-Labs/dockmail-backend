@@ -1,14 +1,14 @@
 import { Server as HttpServer } from "http";
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
-import { env } from "./env";
+import { corsAllowedOrigins, env } from "./env";
 
 export let io: Server;
 
 export function createSocket(server: HttpServer): Server {
   io = new Server(server, {
     cors: {
-      origin: env.CLIENT_URL,
+      origin: corsAllowedOrigins,
       credentials: true,
     },
   });

@@ -5,6 +5,7 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().default(3000),
   CLIENT_URL: z.string().default("http://localhost:3000"),
+  CORS_ORIGINS: z.string().default("http://localhost:3000,http://localhost:3001,https://dockmail.app"),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().default("redis://localhost:6379"),
   JWT_ACCESS_SECRET: z.string().default("change-me-access"),
@@ -58,3 +59,7 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
+
+export const corsAllowedOrigins = env.CORS_ORIGINS.split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
