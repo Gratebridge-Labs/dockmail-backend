@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import type { EmailFolder, Prisma } from "@prisma/client";
 import { prisma } from "../../config/database";
 import { env } from "../../config/env";
@@ -519,10 +521,26 @@ export async function sendDraft(mailboxId: string, emailId: string, scheduledAt?
 export async function performSend(mailboxId: string, emailId: string) {
   const email = await prisma.email.findFirst({
     where: { id: emailId, mailboxId },
-    include: { mailbox: true },
+    include: { mailbox: true, attachments: true },
   });
   if (!email) throw new Error("NOT_FOUND");
   if (!email.toAddresses.length || !email.subject) throw new Error("VALIDATION");
+
+  const smtpAttachments: { filename: string; content: Buffer; contentType?: string }[] = [];
+  for (const att of email.attachments) {
+    const abs = path.isAbsolute(att.storagePath)
+      ? att.storagePath
+      : path.resolve(process.cwd(), att.storagePath);
+    if (!fs.existsSync(abs)) {
+      logger.error(`performSend: attachment file missing email=${emailId} attachment=${att.id} path=${abs}`);
+      throw new Error("ATTACHMENT_FILE_MISSING");
+    }
+    smtpAttachments.push({
+      filename: att.filename,
+      content: fs.readFileSync(abs),
+      contentType: att.mimeType,
+    });
+  }
 
   const participants = [email.mailbox.email, ...email.toAddresses, ...email.ccAddresses];
 
@@ -565,6 +583,7 @@ export async function performSend(mailboxId: string, emailId: string) {
         user: email.mailbox.email,
         pass: email.mailbox.password,
       },
+      attachments: smtpAttachments.length ? smtpAttachments : undefined,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

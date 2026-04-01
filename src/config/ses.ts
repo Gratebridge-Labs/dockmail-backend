@@ -1,6 +1,12 @@
 import nodemailer from "nodemailer";
 import { env } from "./env";
 
+export interface SendAppEmailAttachment {
+  filename: string;
+  content: Buffer;
+  contentType?: string;
+}
+
 export interface SendAppEmailInput {
   /** Sender SMTP address (also used as envelope From when no separate fromName). */
   from: string;
@@ -19,6 +25,7 @@ export interface SendAppEmailInput {
     user: string;
     pass: string;
   };
+  attachments?: SendAppEmailAttachment[];
 }
 
 export async function sendAppEmail(input: SendAppEmailInput): Promise<string | undefined> {
@@ -47,6 +54,12 @@ export async function sendAppEmail(input: SendAppEmailInput): Promise<string | u
     replyTo: input.replyTo,
     inReplyTo: input.inReplyTo,
     references: input.references,
+    attachments:
+      input.attachments?.map((a) => ({
+        filename: a.filename,
+        content: a.content,
+        contentType: a.contentType,
+      })) ?? undefined,
   });
 
   return info.messageId;
