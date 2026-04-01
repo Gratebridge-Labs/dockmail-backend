@@ -8,6 +8,8 @@ function mapAuthError(res: Response, error: unknown) {
   if (msg === "UNAUTHORIZED") return fail(res, "UNAUTHORIZED", "Unauthorized", 401);
   if (msg === "OTP_INVALID") return fail(res, "OTP_INVALID", "Invalid OTP", 400);
   if (msg === "OTP_EXPIRED") return fail(res, "OTP_EXPIRED", "OTP expired", 400);
+  if (msg === "TOKEN_INVALID") return fail(res, "TOKEN_INVALID", "Invalid token", 400);
+  if (msg === "TOKEN_EXPIRED") return fail(res, "TOKEN_EXPIRED", "Token expired", 400);
   if (msg.startsWith("CONFLICT")) return fail(res, "CONFLICT", msg.split(":")[1] || "Conflict", 409);
   return fail(res, "INTERNAL_ERROR", "Something went wrong", 500);
 }
@@ -63,4 +65,40 @@ export async function me(req: Request, res: Response) {
   if (!req.user) return fail(res, "UNAUTHORIZED", "Unauthorized", 401);
   const data = await service.me(req.user.id);
   return ok(res, data);
+}
+
+export async function verifyEmail(req: Request, res: Response) {
+  try {
+    const data = await service.verifyEmailToken(req.body.token);
+    return ok(res, data);
+  } catch (error) {
+    return mapAuthError(res, error);
+  }
+}
+
+export async function resendVerifyEmail(req: Request, res: Response) {
+  try {
+    await service.resendVerifyEmail(req.body.email);
+    return ok(res, { message: "If email exists and is not verified, verification was sent." });
+  } catch (error) {
+    return mapAuthError(res, error);
+  }
+}
+
+export async function forgotPassword(req: Request, res: Response) {
+  try {
+    await service.forgotPassword(req.body.email);
+    return ok(res, { message: "If email exists, reset was sent." });
+  } catch (error) {
+    return mapAuthError(res, error);
+  }
+}
+
+export async function resetPassword(req: Request, res: Response) {
+  try {
+    await service.resetPassword(req.body);
+    return ok(res, { message: "Password reset successful." });
+  } catch (error) {
+    return mapAuthError(res, error);
+  }
 }

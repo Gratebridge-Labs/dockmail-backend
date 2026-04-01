@@ -38,11 +38,20 @@ export async function updateMemberRole(workspaceId: string, memberId: string, ro
 }
 
 export async function removeMember(workspaceId: string, memberId: string) {
-  const target = await prisma.workspaceMember.findFirst({ where: { workspaceId, id: memberId } });
+  const target = await prisma.workspaceMember.findFirst({
+    where: { workspaceId, id: memberId },
+    include: { user: { select: { email: true } } },
+  });
   if (!target) throw new Error("NOT_FOUND");
   if (target.role === Role.OWNER) throw new Error("FORBIDDEN");
   await prisma.mailboxAssignment.deleteMany({ where: { userId: target.userId } });
-  return prisma.workspaceMember.delete({ where: { id: memberId } });
+  const deleted = await prisma.workspaceMember.delete({ where: { id: memberId } });
+  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } });
+  await sendSystemEmail(target.user.email, "team-member-removed", {
+    workspaceName: workspace?.name ?? "Dockmail Workspace",
+    removedByName: "Workspace Admin",
+  }).catch(() => null);
+  return deleted;
 }
 
 export async function inviteMember(
@@ -200,12 +209,12 @@ export function mailboxRequests(workspaceId: string) {
   });
 }
 
-export function createMailboxRequest(
+export async function createMailboxRequest(
   workspaceId: string,
   requestedById: string,
   input: { localPart: string; domainId: string; reason?: string },
 ) {
-  return prisma.mailboxRequest.create({
+  const request = await prisma.mailboxRequest.create({
     data: {
       workspaceId,
       requestedById,
@@ -214,6 +223,28 @@ export function createMailboxRequest(
       reason: input.reason,
     },
   });
+  const [requester, workspace, domain, admins] = await Promise.all([
+    prisma.user.findUnique({ where: { id: requestedById }, select: { fullName: true, email: true } }),
+    prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } }),
+    prisma.domain.findUnique({ where: { id: input.domainId }, select: { domain: true } }),
+    prisma.workspaceMember.findMany({
+      where: { workspaceId, role: { in: [Role.OWNER, Role.ADMIN] } },
+      include: { user: { select: { email: true } } },
+    }),
+  ]);
+  await Promise.all(
+    admins.map((m) =>
+      sendSystemEmail(m.user.email, "mailbox-request-submitted", {
+        requesterName: requester?.fullName ?? "Team Member",
+        requesterEmail: requester?.email ?? "",
+        requestedEmail: `${input.localPart}@${domain?.domain ?? "unknown-domain"}`,
+        reason: input.reason ?? "No reason provided",
+        submittedAt: request.createdAt.toISOString(),
+        workspaceName: workspace?.name ?? "Dockmail Workspace",
+      }).catch(() => null),
+    ),
+  );
+  return request;
 }
 
 export async function reviewMailboxRequest(
@@ -224,8 +255,7 @@ export async function reviewMailboxRequest(
 ) {
   const request = await prisma.mailboxRequest.findFirst({ where: { id: requestId, workspaceId } });
   if (!request) throw new Error("NOT_FOUND");
-
-  return prisma.mailboxRequest.update({
+  const updated = await prisma.mailboxRequest.update({
     where: { id: request.id },
     data: {
       status: input.status,
@@ -234,4 +264,28 @@ export async function reviewMailboxRequest(
       reviewedById: reviewerId,
     },
   });
+  const [requester, reviewer, workspace, domain] = await Promise.all([
+    prisma.user.findUnique({ where: { id: request.requestedById }, select: { email: true } }),
+    prisma.user.findUnique({ where: { id: reviewerId }, select: { fullName: true } }),
+    prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } }),
+    prisma.domain.findUnique({ where: { id: request.domainId }, select: { domain: true } }),
+  ]);
+  if (requester) {
+    if (input.status === "APPROVED") {
+      await sendSystemEmail(requester.email, "mailbox-request-approved", {
+        requestedEmail: `${request.localPart}@${domain?.domain ?? "unknown-domain"}`,
+        approvedByName: reviewer?.fullName ?? "Workspace Admin",
+        approvedAt: new Date().toISOString(),
+        reviewNote: input.reviewNote ?? "",
+      }).catch(() => null);
+    } else {
+      await sendSystemEmail(requester.email, "mailbox-request-declined", {
+        requestedEmail: `${request.localPart}@${domain?.domain ?? "unknown-domain"}`,
+        reviewedByName: reviewer?.fullName ?? "Workspace Admin",
+        workspaceName: workspace?.name ?? "Dockmail Workspace",
+        reviewNote: input.reviewNote ?? "",
+      }).catch(() => null);
+    }
+  }
+  return updated;
 }

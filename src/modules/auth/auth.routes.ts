@@ -1,7 +1,16 @@
 import { Router } from "express";
 import * as controller from "./auth.controller";
 import { validate } from "../../middleware/validate";
-import { loginSchema, refreshSchema, registerSchema, verifyRegisterOtpSchema } from "./auth.schema";
+import {
+  forgotPasswordSchema,
+  loginSchema,
+  refreshSchema,
+  registerSchema,
+  resendVerifyEmailSchema,
+  resetPasswordSchema,
+  verifyEmailSchema,
+  verifyRegisterOtpSchema,
+} from "./auth.schema";
 import { authForgotPasswordLimiter, authLoginLimiter, authRegisterLimiter } from "../../middleware/rateLimit";
 import { requireAuth } from "../../middleware/auth";
 
@@ -19,6 +28,17 @@ authRouter.post("/refresh", validate({ body: refreshSchema }), controller.refres
 authRouter.post("/logout", validate({ body: refreshSchema }), controller.logout);
 authRouter.post("/logout-all", requireAuth, controller.logoutAll);
 authRouter.get("/me", requireAuth, controller.me);
-authRouter.post("/forgot-password", authForgotPasswordLimiter, (_req, res) =>
-  res.json({ success: true, data: { message: "If email exists, reset was sent." } }),
+authRouter.post("/verify-email", validate({ body: verifyEmailSchema }), controller.verifyEmail);
+authRouter.post(
+  "/verify-email/resend",
+  authRegisterLimiter,
+  validate({ body: resendVerifyEmailSchema }),
+  controller.resendVerifyEmail,
 );
+authRouter.post(
+  "/forgot-password",
+  authForgotPasswordLimiter,
+  validate({ body: forgotPasswordSchema }),
+  controller.forgotPassword,
+);
+authRouter.post("/reset-password", authForgotPasswordLimiter, validate({ body: resetPasswordSchema }), controller.resetPassword);

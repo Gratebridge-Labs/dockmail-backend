@@ -5,6 +5,7 @@ import { comparePassword, hashPassword } from "../../utils/password";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../../utils/jwt";
 import { slugify } from "../../utils/slugify";
 import { sendSystemEmail } from "../../services/email.service";
+import { env } from "../../config/env";
 
 function authTokens(user: { id: string; email: string; fullName: string }) {
   const accessToken = signAccessToken(user);
@@ -86,6 +87,10 @@ export async function registerUser(input: {
     deviceInfo: "Registration",
     location: "Unknown",
   });
+  await sendSystemEmail(input.email, "verify-email", {
+    verifyUrl: verifyEmailUrl(emailVerifyToken),
+    expiryDate: "in 24 hours",
+  }).catch(() => null);
 
   return {
     status: "OTP_REQUIRED" as const,
@@ -146,6 +151,95 @@ export async function verifyRegisterOtp(input: { email: string; otp: string }) {
     activeWorkspace,
     tokens,
   };
+}
+
+function verifyEmailUrl(token: string) {
+  const base = (env.CLIENT_URL || "https://dockmail.app").replace(/\/$/, "");
+  return `${base}/auth/verify-email?token=${token}`;
+}
+
+function resetPasswordUrl(token: string) {
+  const base = (env.CLIENT_URL || "https://dockmail.app").replace(/\/$/, "");
+  return `${base}/auth/reset-password?token=${token}`;
+}
+
+export async function verifyEmailToken(token: string) {
+  const user = await prisma.user.findFirst({
+    where: { emailVerifyToken: token },
+    select: { id: true, email: true, fullName: true, emailVerified: true },
+  });
+  if (!user) throw new Error("TOKEN_INVALID");
+  if (user.emailVerified) return { verified: true };
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { emailVerified: true, emailVerifyToken: null },
+  });
+  return { verified: true };
+}
+
+export async function resendVerifyEmail(email: string) {
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, email: true, emailVerified: true },
+  });
+  if (!user || user.emailVerified) return;
+
+  const token = crypto.randomBytes(24).toString("hex");
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { emailVerifyToken: token },
+  });
+
+  await sendSystemEmail(user.email, "verify-email", {
+    verifyUrl: verifyEmailUrl(token),
+    expiryDate: "in 24 hours",
+  }).catch(() => null);
+}
+
+export async function forgotPassword(email: string) {
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, email: true, fullName: true, emailVerified: true },
+  });
+  if (!user) return;
+
+  const token = crypto.randomBytes(24).toString("hex");
+  const expiry = new Date(Date.now() + 60 * 60 * 1000);
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { resetToken: token, resetTokenExpiry: expiry },
+  });
+
+  await sendSystemEmail(user.email, "reset-password", {
+    resetUrl: resetPasswordUrl(token),
+    timestamp: new Date().toISOString(),
+    expiryTime: expiry.toISOString(),
+  }).catch(() => null);
+}
+
+export async function resetPassword(input: { token: string; password: string }) {
+  const user = await prisma.user.findFirst({
+    where: { resetToken: input.token },
+    select: { id: true, email: true, fullName: true, resetTokenExpiry: true },
+  });
+  if (!user) throw new Error("TOKEN_INVALID");
+  if (!user.resetTokenExpiry || user.resetTokenExpiry.getTime() < Date.now()) throw new Error("TOKEN_EXPIRED");
+
+  const passwordHash = await hashPassword(input.password);
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash, resetToken: null, resetTokenExpiry: null },
+    }),
+    prisma.refreshToken.deleteMany({ where: { userId: user.id } }),
+  ]);
+
+  await sendSystemEmail(user.email, "password-changed", {
+    changedAt: new Date().toISOString(),
+    deviceInfo: "Unknown device",
+    location: "Unknown",
+  }).catch(() => null);
 }
 
 export async function loginUser(input: { email: string; password: string; workspaceSlug?: string }) {

@@ -82,8 +82,12 @@ export function addPaymentMethod(
   });
 }
 
-export function removePaymentMethod(workspaceId: string) {
-  return prisma.billing.update({
+export async function removePaymentMethod(workspaceId: string) {
+  const before = await prisma.billing.findUnique({
+    where: { workspaceId },
+    select: { cardBrand: true, cardLast4: true },
+  });
+  const billing = await prisma.billing.update({
     where: { workspaceId },
     data: {
       cardLast4: null,
@@ -92,6 +96,26 @@ export function removePaymentMethod(workspaceId: string) {
       status: BillingStatus.PAST_DUE,
     },
   });
+  const [workspace, owners] = await Promise.all([
+    prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } }),
+    prisma.workspaceMember.findMany({
+      where: { workspaceId, role: Role.OWNER },
+      include: { user: { select: { email: true } } },
+    }),
+  ]);
+  await Promise.all(
+    owners.map((m) =>
+      sendSystemEmail(m.user.email, "billing-payment-failed", {
+        amount: "0.00",
+        workspaceName: workspace?.name ?? "Dockmail Workspace",
+        failedAt: new Date().toISOString(),
+        cardBrand: before?.cardBrand ?? "Card",
+        cardLast4: before?.cardLast4 ?? "----",
+        nextRetryDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      }).catch(() => null),
+    ),
+  );
+  return billing;
 }
 
 export async function updateStorageTier(workspaceId: string, tier: StorageTier) {
