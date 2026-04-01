@@ -4,6 +4,7 @@ import { logger } from "../../config/logger";
 import { deleteMailcowDomain, deleteMailcowMailbox, ensureMailcowDomain, getMailcowDkimTxt } from "../../config/mailcow";
 import { hasMxRecord, hasTxtContains } from "../../utils/dns";
 import fs from "node:fs";
+import dns from "node:dns/promises";
 import { Role } from "@prisma/client";
 import { sendSystemEmail } from "../../services/email.service";
 
@@ -132,6 +133,35 @@ export async function verifyDomain(workspaceId: string, domainId: string) {
     : await hasTxtContains(dkimHost, "v=DKIM1").catch(() => false);
 
   const verified = mailcowVerified && mxVerified && spfVerified && dkimVerified && dmarcVerified;
+  if (!verified) {
+    try {
+      const [mxRaw, spfRaw, dmarcRaw, dkimRaw] = await Promise.all([
+        dns.resolveMx(domain.domain).catch(() => []),
+        dns.resolveTxt(domain.domain).catch(() => []),
+        dns.resolveTxt(`_dmarc.${domain.domain}`).catch(() => []),
+        dns.resolveTxt(`${env.DKIM_SELECTOR}._domainkey.${domain.domain}`).catch(() => []),
+      ]);
+      logger.warn(
+        `verifyDomain failed domain=${domain.domain} expectedMX=${env.INBOUND_MX_HOST} expectedDkimSelector=${env.DKIM_SELECTOR} expectedDkimKeyPrefix=${
+          expectedDkimKey?.slice(0, 24) ?? "none"
+        } checks=${JSON.stringify({
+          mailcowVerified,
+          mxVerified,
+          spfVerified,
+          dkimVerified,
+          dmarcVerified,
+        })} raw=${JSON.stringify({
+          mx: mxRaw,
+          txtRoot: spfRaw,
+          txtDmarc: dmarcRaw,
+          txtDkim: dkimRaw,
+        })}`,
+      );
+    } catch (e) {
+      logger.warn(`verifyDomain debug logging failed for ${domain.domain}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
   const updated = await prisma.domain.update({
     where: { id: domain.id },
     data: {
