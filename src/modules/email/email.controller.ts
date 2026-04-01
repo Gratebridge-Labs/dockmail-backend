@@ -11,7 +11,8 @@ function parseBoolean(value: unknown): boolean | undefined {
 }
 
 export async function listEmails(req: Request, res: Response) {
-  const view = req.query.view === "flat" ? "flat" : "threaded";
+  /** Default: all emails as individual rows. Use `view=threaded` for Gmail-style thread groups. */
+  const view = req.query.view === "threaded" ? "threaded" : "flat";
   const data = await service.listEmails(String(req.params.mailboxId), {
     folder: typeof req.query.folder === "string" ? req.query.folder : undefined,
     status: typeof req.query.status === "string" ? req.query.status : undefined,

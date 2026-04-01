@@ -20,7 +20,7 @@ interface ListEmailsOptions {
   dateTo?: Date;
   page?: number;
   perPage?: number;
-  /** Default `threaded` (Gmail-style). Use `flat` for one row per email. */
+  /** Default `flat` (every email). Use `threaded` for one row per conversation. */
   view?: "flat" | "threaded";
 }
 
@@ -74,10 +74,10 @@ function formatReferencesHeader(ids: string[]): string | undefined {
 }
 
 export async function listEmails(mailboxId: string, options: ListEmailsOptions = {}) {
-  if (options.view === "flat") {
-    return listEmailsFlat(mailboxId, options);
+  if (options.view === "threaded") {
+    return listEmailsThreaded(mailboxId, options);
   }
-  return listEmailsThreaded(mailboxId, options);
+  return listEmailsFlat(mailboxId, options);
 }
 
 async function listEmailsFlat(mailboxId: string, options: ListEmailsOptions = {}) {
@@ -99,9 +99,52 @@ async function listEmailsFlat(mailboxId: string, options: ListEmailsOptions = {}
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / perPage));
+
+  const distinctThreadIds = [...new Set(items.map((e) => e.threadId).filter(Boolean))] as string[];
+  const messagesByThread = new Map<string, (typeof items)[number][]>();
+  if (distinctThreadIds.length) {
+    const allInThreads = await prisma.email.findMany({
+      where: {
+        mailboxId,
+        deletedAt: null,
+        threadId: { in: distinctThreadIds },
+      },
+      include: { attachments: true },
+      orderBy: [{ receivedAt: "asc" }, { createdAt: "asc" }],
+    });
+    for (const row of allInThreads) {
+      if (!row.threadId) continue;
+      const arr = messagesByThread.get(row.threadId) ?? [];
+      arr.push(row);
+      messagesByThread.set(row.threadId, arr);
+    }
+  }
+
+  const itemsWithThread = items.map((email) => {
+    const tid = email.threadId;
+    if (!tid) {
+      return { ...email, isThreadRoot: true, thread: null };
+    }
+    const messages = messagesByThread.get(tid);
+    const fullThread =
+      messages && messages.length > 0 ? messages : [email];
+    return {
+      ...email,
+      isThreadRoot: (email.id === tid) as boolean,
+      thread: {
+        id: tid,
+        messageCount: fullThread.length,
+        /** Chronological: original (root) first, latest last — full rows + attachments each. */
+        messages: fullThread,
+        original: fullThread[0],
+        latest: fullThread[fullThread.length - 1],
+      },
+    };
+  });
+
   return {
     view: "flat" as const,
-    items,
+    items: itemsWithThread,
     meta: {
       page,
       perPage,
