@@ -20,7 +20,7 @@ interface ListEmailsOptions {
   dateTo?: Date;
   page?: number;
   perPage?: number;
-  /** Default `flat` (every email). Use `threaded` for one row per conversation. */
+  /** Default `flat` = one list row per thread (plus one row per standalone message). Use `threaded` for grouped thread summary rows. */
   view?: "flat" | "threaded";
 }
 
@@ -80,34 +80,90 @@ export async function listEmails(mailboxId: string, options: ListEmailsOptions =
   return listEmailsFlat(mailboxId, options);
 }
 
+function activityTime(
+  receivedAt: Date | null,
+  sentAt: Date | null,
+  createdAt: Date,
+): number {
+  return (receivedAt ?? sentAt ?? createdAt).getTime();
+}
+
+type EmailWithAttachments = Awaited<
+  ReturnType<
+    typeof prisma.email.findMany<{
+      include: { attachments: true };
+    }>
+  >
+>[number];
+
 async function listEmailsFlat(mailboxId: string, options: ListEmailsOptions = {}) {
   const page = Math.max(1, options.page ?? 1);
   const perPage = Math.min(50, Math.max(1, options.perPage ?? 50));
   const skip = (page - 1) * perPage;
 
-  const where = buildEmailWhere(mailboxId, options);
+  const whereBase = buildEmailWhere(mailboxId, options);
+  const whereList: Prisma.EmailWhereInput = {
+    ...whereBase,
+    ...(options.folder === "TRASH" ? {} : { deletedAt: null }),
+  };
 
-  const [total, items] = await Promise.all([
-    prisma.email.count({ where }),
+  const [threadedGroups, standaloneRows] = await Promise.all([
+    prisma.email.groupBy({
+      by: ["threadId"],
+      where: { ...whereList, threadId: { not: null } },
+      _max: { receivedAt: true, sentAt: true, createdAt: true },
+    }),
     prisma.email.findMany({
-      where,
-      include: { attachments: true },
-      orderBy: { createdAt: "desc" },
-      skip,
-      take: perPage,
+      where: { ...whereList, threadId: null },
+      select: {
+        id: true,
+        receivedAt: true,
+        sentAt: true,
+        createdAt: true,
+      },
     }),
   ]);
 
-  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  type RowPlan =
+    | { kind: "thread"; threadId: string; sortKey: number }
+    | { kind: "standalone"; emailId: string; sortKey: number };
 
-  const distinctThreadIds = [...new Set(items.map((e) => e.threadId).filter(Boolean))] as string[];
-  const messagesByThread = new Map<string, (typeof items)[number][]>();
-  if (distinctThreadIds.length) {
+  const plans: RowPlan[] = [];
+
+  for (const g of threadedGroups) {
+    const tid = g.threadId!;
+    const sortKey = activityTime(
+      g._max.receivedAt,
+      g._max.sentAt,
+      g._max.createdAt ?? new Date(0),
+    );
+    plans.push({ kind: "thread", threadId: tid, sortKey });
+  }
+
+  for (const s of standaloneRows) {
+    plans.push({
+      kind: "standalone",
+      emailId: s.id,
+      sortKey: activityTime(s.receivedAt, s.sentAt, s.createdAt),
+    });
+  }
+
+  plans.sort((a, b) => b.sortKey - a.sortKey);
+
+  const total = plans.length;
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  const pagePlans = plans.slice(skip, skip + perPage);
+
+  const threadIdsOnPage = pagePlans.filter((p) => p.kind === "thread").map((p) => p.threadId);
+  const standaloneIdsOnPage = pagePlans.filter((p) => p.kind === "standalone").map((p) => p.emailId);
+
+  const messagesByThread = new Map<string, EmailWithAttachments[]>();
+  if (threadIdsOnPage.length) {
     const allInThreads = await prisma.email.findMany({
       where: {
         mailboxId,
         deletedAt: null,
-        threadId: { in: distinctThreadIds },
+        threadId: { in: threadIdsOnPage },
       },
       include: { attachments: true },
       orderBy: [{ receivedAt: "asc" }, { createdAt: "asc" }],
@@ -120,27 +176,77 @@ async function listEmailsFlat(mailboxId: string, options: ListEmailsOptions = {}
     }
   }
 
-  const itemsWithThread = items.map((email) => {
-    const tid = email.threadId;
-    if (!tid) {
-      return { ...email, isThreadRoot: true, thread: null };
+  const repByThread = new Map<string, EmailWithAttachments>();
+  if (threadIdsOnPage.length) {
+    const candidates = await prisma.email.findMany({
+      where: {
+        ...whereList,
+        threadId: { in: threadIdsOnPage },
+      },
+      orderBy: [{ receivedAt: "desc" }, { sentAt: "desc" }, { createdAt: "desc" }],
+      include: { attachments: true },
+    });
+    for (const e of candidates) {
+      if (!e.threadId) continue;
+      if (!repByThread.has(e.threadId)) {
+        repByThread.set(e.threadId, e);
+      }
     }
+  }
+
+  const standaloneById = new Map<string, EmailWithAttachments>();
+  if (standaloneIdsOnPage.length) {
+    const rows = await prisma.email.findMany({
+      where: { id: { in: standaloneIdsOnPage }, mailboxId },
+      include: { attachments: true },
+    });
+    for (const r of rows) {
+      standaloneById.set(r.id, r);
+    }
+  }
+
+  type ItemRow = EmailWithAttachments & {
+    isThreadRoot: boolean;
+    thread:
+      | null
+      | {
+          id: string;
+          messageCount: number;
+          messages: EmailWithAttachments[];
+          original: EmailWithAttachments;
+          latest: EmailWithAttachments;
+        };
+  };
+
+  const itemsWithThread: ItemRow[] = [];
+
+  for (const plan of pagePlans) {
+    if (plan.kind === "standalone") {
+      const email = standaloneById.get(plan.emailId);
+      if (!email) continue;
+      itemsWithThread.push({ ...email, isThreadRoot: true, thread: null });
+      continue;
+    }
+
+    const rep = repByThread.get(plan.threadId);
+    if (!rep) continue;
+
+    const tid = plan.threadId;
     const messages = messagesByThread.get(tid);
-    const fullThread =
-      messages && messages.length > 0 ? messages : [email];
-    return {
-      ...email,
-      isThreadRoot: (email.id === tid) as boolean,
+    const fullThread = messages && messages.length > 0 ? messages : [rep];
+
+    itemsWithThread.push({
+      ...rep,
+      isThreadRoot: rep.id === tid,
       thread: {
         id: tid,
         messageCount: fullThread.length,
-        /** Chronological: original (root) first, latest last — full rows + attachments each. */
         messages: fullThread,
         original: fullThread[0],
         latest: fullThread[fullThread.length - 1],
       },
-    };
-  });
+    });
+  }
 
   return {
     view: "flat" as const,
