@@ -28,8 +28,31 @@ function buildDnsRecords(domain: string, dkimTxt: string) {
   ];
 }
 
+async function resolveDkimTxtForDomain(domain: string): Promise<string> {
+  let dkimTxt = dkimTxtValue();
+  if (env.MAILCOW_API_URL && env.MAILCOW_API_KEY) {
+    try {
+      const dynamicDkim = await getMailcowDkimTxt(domain);
+      if (dynamicDkim) dkimTxt = dynamicDkim;
+    } catch (e) {
+      logger.warn(`resolveDkimTxtForDomain failed for ${domain} — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  return dkimTxt;
+}
+
 export async function listDomains(workspaceId: string) {
-  return prisma.domain.findMany({ where: { workspaceId }, orderBy: { createdAt: "desc" } });
+  const domains = await prisma.domain.findMany({ where: { workspaceId }, orderBy: { createdAt: "desc" } });
+  const enriched = await Promise.all(
+    domains.map(async (domain) => {
+      const dkimTxt = await resolveDkimTxtForDomain(domain.domain);
+      return {
+        ...domain,
+        dnsRecords: buildDnsRecords(domain.domain, dkimTxt),
+      };
+    }),
+  );
+  return enriched;
 }
 
 export async function addDomain(workspaceId: string, domainRaw: string) {
@@ -86,15 +109,7 @@ export async function verifyDomain(workspaceId: string, domainId: string) {
     }
   }
 
-  let dkimTxt = dkimTxtValue();
-  if (env.MAILCOW_API_URL && env.MAILCOW_API_KEY) {
-    try {
-      const dynamicDkim = await getMailcowDkimTxt(domain.domain);
-      if (dynamicDkim) dkimTxt = dynamicDkim;
-    } catch (e) {
-      logger.warn(`verifyDomain: dynamic DKIM fetch failed for ${domain.domain} — ${e instanceof Error ? e.message : String(e)}`);
-    }
-  }
+  const dkimTxt = await resolveDkimTxtForDomain(domain.domain);
 
   const [mxVerified, spfVerified, dmarcVerified] = await Promise.all([
     hasMxRecord(domain.domain, env.INBOUND_MX_HOST).catch(() => false),

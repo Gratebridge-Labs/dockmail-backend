@@ -52,3 +52,19 @@ export async function resetDomain(req: Request, res: Response) {
     return fail(res, "INTERNAL_ERROR", "Failed to reset domain", 500);
   }
 }
+
+export async function deleteDomain(req: Request, res: Response) {
+  try {
+    const confirm = String(req.query.confirm ?? "") === "true";
+    const data = await service.resetDomain(String(req.params.workspaceId), String(req.params.domainId), confirm);
+    return ok(res, data);
+  } catch (error) {
+    if (error instanceof Error && error.message === "NOT_FOUND") {
+      return fail(res, "NOT_FOUND", "Domain not found", 404);
+    }
+    if (error instanceof Error && error.message === "CONFIRM_REQUIRED") {
+      return fail(res, "VALIDATION_ERROR", "Set query parameter confirm=true to delete this domain and related data", 400);
+    }
+    return fail(res, "INTERNAL_ERROR", "Failed to delete domain", 500);
+  }
+}

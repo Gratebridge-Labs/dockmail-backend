@@ -12,4 +12,5 @@ domainRouter.get("/", requireRole("MEMBER", "ADMIN", "OWNER"), controller.listDo
 domainRouter.post("/", requireRole("ADMIN", "OWNER"), validate({ body: createDomainSchema }), controller.addDomain);
 domainRouter.get("/:domainId", requireRole("MEMBER", "ADMIN", "OWNER"), controller.getDomain);
 domainRouter.post("/:domainId/verify", requireRole("ADMIN", "OWNER"), controller.verifyDomain);
+domainRouter.delete("/:domainId", requireRole("ADMIN", "OWNER"), validate({ query: resetDomainSchema }), controller.deleteDomain);
 domainRouter.delete("/:domainId/reset", requireRole("ADMIN", "OWNER"), validate({ query: resetDomainSchema }), controller.resetDomain);
