@@ -1,7 +1,7 @@
 import { prisma } from "../../config/database";
 import { env } from "../../config/env";
 import { logger } from "../../config/logger";
-import { deleteMailcowDomain, deleteMailcowMailbox, ensureMailcowDomain } from "../../config/mailcow";
+import { deleteMailcowDomain, deleteMailcowMailbox, ensureMailcowDomain, getMailcowDkimTxt } from "../../config/mailcow";
 import { hasMxRecord, hasTxtContains } from "../../utils/dns";
 import fs from "node:fs";
 import { Role } from "@prisma/client";
@@ -17,6 +17,15 @@ function dkimTxtValue() {
     return key.startsWith("v=DKIM1") ? key : `v=DKIM1; p=${key}`;
   }
   return "v=DKIM1; p=<mailcow-public-key>";
+}
+
+function buildDnsRecords(domain: string, dkimTxt: string) {
+  return [
+    { type: "MX", name: "@", value: env.INBOUND_MX_HOST, priority: 10 },
+    { type: "TXT", name: "@", value: "v=spf1 mx -all" },
+    { type: "TXT", name: "_dmarc", value: `v=DMARC1; p=none; rua=mailto:dmarc@${domain}; fo=1` },
+    { type: "TXT", name: `${env.DKIM_SELECTOR}._domainkey`, value: dkimTxt },
+  ];
 }
 
 export async function listDomains(workspaceId: string) {
@@ -39,22 +48,22 @@ export async function addDomain(workspaceId: string, domainRaw: string) {
     },
   });
 
-  const dnsRecords = [
-    { type: "MX", name: "@", value: env.INBOUND_MX_HOST, priority: 10 },
-    { type: "TXT", name: "@", value: "v=spf1 mx -all" },
-    { type: "TXT", name: "_dmarc", value: `v=DMARC1; p=none; rua=mailto:dmarc@${domain}; fo=1` },
-    { type: "TXT", name: `${env.DKIM_SELECTOR}._domainkey`, value: dkimTxtValue() },
-  ];
+  let dkimTxt = dkimTxtValue();
+  if (env.MAILCOW_API_URL && env.MAILCOW_API_KEY) {
+    try {
+      await ensureMailcowDomain(domain);
+      const dynamicDkim = await getMailcowDkimTxt(domain);
+      if (dynamicDkim) dkimTxt = dynamicDkim;
+    } catch (e) {
+      logger.warn(`addDomain: dynamic DKIM fetch failed for ${domain} — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  const dnsRecords = buildDnsRecords(domain, dkimTxt);
 
   return {
     domain: record,
     dnsRecords,
-    guidance: {
-      dkim:
-        dnsRecords[3].value.includes("<mailcow-public-key>")
-          ? "Set DKIM_PUBLIC_KEY in backend env (or copy exact DKIM TXT from Mailcow DNS helper) so this endpoint returns your real public key."
-          : "DKIM TXT value is provided from DKIM_PUBLIC_KEY env.",
-    },
   };
 }
 
@@ -77,14 +86,24 @@ export async function verifyDomain(workspaceId: string, domainId: string) {
     }
   }
 
+  let dkimTxt = dkimTxtValue();
+  if (env.MAILCOW_API_URL && env.MAILCOW_API_KEY) {
+    try {
+      const dynamicDkim = await getMailcowDkimTxt(domain.domain);
+      if (dynamicDkim) dkimTxt = dynamicDkim;
+    } catch (e) {
+      logger.warn(`verifyDomain: dynamic DKIM fetch failed for ${domain.domain} — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
   const [mxVerified, spfVerified, dmarcVerified] = await Promise.all([
     hasMxRecord(domain.domain, env.INBOUND_MX_HOST).catch(() => false),
     hasTxtContains(domain.domain, "v=spf1").catch(() => false),
     hasTxtContains(`_dmarc.${domain.domain}`, "v=DMARC1").catch(() => false),
   ]);
-  const dkimVerified = await hasTxtContains(`${env.DKIM_SELECTOR}._domainkey.${domain.domain}`, "v=DKIM1").catch(
-    () => false,
-  );
+  const dkimHost = `${env.DKIM_SELECTOR}._domainkey.${domain.domain}`;
+  const dkimPublicPart = dkimTxt.replace(/^v=DKIM1;\s*p=/i, "").trim();
+  const dkimVerified = await hasTxtContains(dkimHost, dkimPublicPart || "v=DKIM1").catch(() => false);
 
   const verified = mailcowVerified && mxVerified && spfVerified && dkimVerified && dmarcVerified;
   const updated = await prisma.domain.update({
@@ -122,6 +141,7 @@ export async function verifyDomain(workspaceId: string, domainId: string) {
 
   return {
     domain: updated,
+    dnsRecords: buildDnsRecords(domain.domain, dkimTxt),
     checks: { mxVerified, spfVerified, dkimVerified, dmarcVerified, mailcowVerified },
   };
 }

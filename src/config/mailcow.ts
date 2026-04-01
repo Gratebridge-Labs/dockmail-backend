@@ -76,6 +76,49 @@ async function mailcowRequest(path: string, payload: unknown): Promise<string> {
   return resBody;
 }
 
+async function mailcowGet(path: string): Promise<string> {
+  if (!env.MAILCOW_API_URL || !env.MAILCOW_API_KEY) {
+    throw new Error("Mailcow is not configured (MAILCOW_API_URL / MAILCOW_API_KEY)");
+  }
+  const url = `${env.MAILCOW_API_URL.replace(/\/$/, "")}${path}`;
+  let statusCode: number;
+  let resBody: string;
+  try {
+    const result = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
+      const u = new URL(url);
+      const isHttps = u.protocol === "https:";
+      const lib = isHttps ? https : http;
+      const options: http.RequestOptions = {
+        hostname: u.hostname,
+        port: u.port || (isHttps ? 443 : 80),
+        path: `${u.pathname}${u.search}`,
+        method: "GET",
+        headers: { "X-API-Key": env.MAILCOW_API_KEY ?? "" },
+      };
+      if (isHttps && env.MAILCOW_TLS_INSECURE === "true") {
+        (options as https.RequestOptions).rejectUnauthorized = false;
+      }
+      const req = lib.request(options, (res) => {
+        let data = "";
+        res.on("data", (c) => {
+          data += c;
+        });
+        res.on("end", () => resolve({ statusCode: res.statusCode ?? 0, body: data }));
+      });
+      req.on("error", reject);
+      req.end();
+    });
+    statusCode = result.statusCode;
+    resBody = result.body;
+  } catch (e) {
+    throw e;
+  }
+  if (statusCode < 200 || statusCode >= 300) {
+    throw new Error(`Mailcow HTTP ${statusCode}: ${resBody.slice(0, 800)}`);
+  }
+  return resBody;
+}
+
 /** Mailcow returns HTTP 200 with JSON body; failures use type "danger" / "error". */
 function assertMailcowSuccess(
   body: string,
@@ -173,4 +216,73 @@ export async function deleteMailcowDomain(domainName: string) {
   if (!env.MAILCOW_API_URL || !env.MAILCOW_API_KEY) return;
   const resBody = await mailcowRequest("/api/v1/delete/domain", [domainName]);
   assertMailcowSuccess(resBody, { ignoreMissing: true });
+}
+
+function normalizeDkimTxt(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const trimmed = raw.trim().replace(/^"|"$/g, "");
+  if (!trimmed) return undefined;
+  if (/^v=DKIM1/i.test(trimmed)) return trimmed;
+  // If only key material was provided, prepend the full TXT format.
+  if (/^[A-Za-z0-9+\/=]+$/.test(trimmed)) return `v=DKIM1; p=${trimmed}`;
+  return undefined;
+}
+
+function pickDkimCandidate(obj: unknown): string | undefined {
+  if (!obj || typeof obj !== "object") return undefined;
+  const record = obj as Record<string, unknown>;
+  const direct = [
+    record.dkim_txt,
+    record.dkimTxt,
+    record.public_key,
+    record.publicKey,
+    record.pubkey,
+    record.txt,
+    record.value,
+  ];
+  for (const v of direct) {
+    if (typeof v === "string") {
+      const normalized = normalizeDkimTxt(v);
+      if (normalized) return normalized;
+    }
+  }
+  const nested = [record.data, record.result, record.attrs, record.attr, record.dkim];
+  for (const v of nested) {
+    const normalized = pickDkimCandidate(v);
+    if (normalized) return normalized;
+  }
+  return undefined;
+}
+
+/**
+ * Resolve per-domain DKIM TXT value from Mailcow.
+ * Tries multiple API variants to stay compatible across Mailcow versions.
+ */
+export async function getMailcowDkimTxt(domainName: string): Promise<string | undefined> {
+  if (!env.MAILCOW_API_URL || !env.MAILCOW_API_KEY) return undefined;
+
+  const attempts: Array<() => Promise<string>> = [
+    () => mailcowRequest(`/api/v1/get/dkim/${encodeURIComponent(domainName)}`, {}),
+    () => mailcowRequest(`/api/v1/get/dkim/${encodeURIComponent(domainName)}`, domainName),
+    () => mailcowGet(`/api/v1/get/dkim/${encodeURIComponent(domainName)}`),
+  ];
+
+  for (const attempt of attempts) {
+    try {
+      const body = await attempt();
+      const parsed = JSON.parse(body) as unknown;
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          const candidate = pickDkimCandidate(item);
+          if (candidate) return candidate;
+        }
+      } else {
+        const candidate = pickDkimCandidate(parsed);
+        if (candidate) return candidate;
+      }
+    } catch {
+      // Try next known API variant.
+    }
+  }
+  return undefined;
 }

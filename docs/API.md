@@ -53,13 +53,13 @@
 
 ## POST /v1/workspaces/:workspaceId/domains
 
-**Description:** Add tenant domain and return Mailcow SMTP/inbound DNS instructions.
+**Description:** Add tenant domain and return full DNS records (MX/SPF/DMARC/DKIM) for onboarding.
 
 **Auth required:** Yes (ADMIN/OWNER)
 
 ## POST /v1/workspaces/:workspaceId/domains/:domainId/verify
 
-**Description:** Verify MX/SPF/DKIM/DMARC status using DNS records.
+**Description:** Verify MX/SPF/DKIM/DMARC status and return full DNS records alongside verification checks.
 
 **Auth required:** Yes (ADMIN/OWNER)
 
