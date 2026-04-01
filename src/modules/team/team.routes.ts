@@ -15,15 +15,6 @@ export const acceptInviteRouter = Router();
 
 teamRouter.use(requireAuth);
 teamRouter.get("/", requireRole("ADMIN", "OWNER"), controller.members);
-teamRouter.get("/:memberId", requireRole("ADMIN", "OWNER"), controller.member);
-teamRouter.patch(
-  "/:memberId",
-  requireRole("OWNER"),
-  validate({ body: updateRoleSchema }),
-  controller.updateMemberRole,
-);
-teamRouter.delete("/:memberId", requireRole("ADMIN", "OWNER"), controller.removeMember);
-
 teamRouter.post("/invite", requireRole("ADMIN", "OWNER"), validate({ body: inviteSchema }), controller.invite);
 teamRouter.get("/invites", requireRole("ADMIN", "OWNER"), controller.invites);
 teamRouter.delete("/invites/:inviteId", requireRole("ADMIN", "OWNER"), controller.cancelInvite);
@@ -37,5 +28,13 @@ teamRouter.patch(
   validate({ body: reviewMailboxRequestSchema }),
   controller.reviewMailboxRequest,
 );
+teamRouter.get("/:memberId", requireRole("ADMIN", "OWNER"), controller.member);
+teamRouter.patch(
+  "/:memberId",
+  requireRole("OWNER"),
+  validate({ body: updateRoleSchema }),
+  controller.updateMemberRole,
+);
+teamRouter.delete("/:memberId", requireRole("ADMIN", "OWNER"), controller.removeMember);
 
 acceptInviteRouter.post("/accept-invite", validate({ body: acceptInviteSchema }), controller.acceptInvite);
