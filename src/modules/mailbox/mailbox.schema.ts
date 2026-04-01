@@ -22,3 +22,10 @@ export const reviewMailboxRequestSchema = z.object({
   status: z.enum(["APPROVED", "DECLINED"]),
   reviewNote: z.string().max(500).optional(),
 });
+
+export const patchMailboxSchema = z.object({
+  /** Set to `null` or empty string to clear. */
+  displayName: z
+    .union([z.string().max(100), z.null()])
+    .transform((v) => (v === "" || v === null ? null : v)),
+});

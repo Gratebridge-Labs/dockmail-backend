@@ -206,6 +206,16 @@ export async function addMailcowMailbox(input: {
   assertMailcowSuccess(resBody, { ignoreMailboxExists: true });
 }
 
+/** Update mailbox display name in Mailcow (SoGo / identity). */
+export async function editMailcowMailboxName(emailAddress: string, name: string) {
+  if (!env.MAILCOW_API_URL || !env.MAILCOW_API_KEY) return;
+  const resBody = await mailcowRequest("/api/v1/edit/mailbox", {
+    attr: { name },
+    items: [emailAddress],
+  });
+  assertMailcowSuccess(resBody, { ignoreMissing: true });
+}
+
 export async function deleteMailcowMailbox(emailAddress: string) {
   if (!env.MAILCOW_API_URL || !env.MAILCOW_API_KEY) return;
   const resBody = await mailcowRequest("/api/v1/delete/mailbox", [emailAddress]);

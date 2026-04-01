@@ -3,7 +3,7 @@ import fs from "node:fs";
 import { Prisma, Role } from "@prisma/client";
 import { prisma } from "../../config/database";
 import { logger } from "../../config/logger";
-import { addMailcowMailbox, deleteMailcowMailbox } from "../../config/mailcow";
+import { addMailcowMailbox, deleteMailcowMailbox, editMailcowMailboxName } from "../../config/mailcow";
 import { sendSystemEmail } from "../../services/email.service";
 
 const mailboxInclude = { domain: true, assignments: true } as const;
@@ -160,6 +160,34 @@ export async function createMailbox(
   }
 
   return enrichMailboxAssignments(mailbox);
+}
+
+export async function patchMailbox(
+  workspaceId: string,
+  mailboxId: string,
+  input: { displayName: string | null },
+) {
+  const existing = await prisma.mailbox.findFirst({
+    where: { id: mailboxId, workspaceId },
+  });
+  if (!existing) throw new Error("NOT_FOUND");
+
+  const updated = await prisma.mailbox.update({
+    where: { id: mailboxId },
+    data: { displayName: input.displayName },
+    include: mailboxInclude,
+  });
+
+  const mailcowName = input.displayName?.trim() ? input.displayName.trim() : updated.email;
+  try {
+    await editMailcowMailboxName(updated.email, mailcowName);
+  } catch (e) {
+    logger.warn(
+      `patchMailbox: Mailcow name sync failed for ${updated.email} — ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+
+  return enrichMailboxAssignments(updated);
 }
 
 export async function deleteMailbox(workspaceId: string, mailboxId: string) {

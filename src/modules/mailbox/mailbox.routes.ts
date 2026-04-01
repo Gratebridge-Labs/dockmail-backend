@@ -6,6 +6,7 @@ import {
   createMailboxSchema,
   mailboxAssignSchema,
   mailboxRequestSchema,
+  patchMailboxSchema,
   reviewMailboxRequestSchema,
 } from "./mailbox.schema";
 import * as controller from "./mailbox.controller";
@@ -34,5 +35,11 @@ mailboxRouter.patch(
   requireRole("ADMIN", "OWNER"),
   validate({ body: reviewMailboxRequestSchema }),
   controller.reviewMailboxRequest,
+);
+mailboxRouter.patch(
+  "/:mailboxId",
+  requireRole("ADMIN", "OWNER"),
+  validate({ body: patchMailboxSchema }),
+  controller.patchMailbox,
 );
 mailboxRouter.delete("/:mailboxId", requireRole("ADMIN", "OWNER"), controller.deleteMailbox);
