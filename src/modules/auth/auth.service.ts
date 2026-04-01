@@ -113,7 +113,6 @@ export async function verifyRegisterOtp(input: { email: string; otp: string }) {
     where: { id: user.id },
     data: {
       emailVerified: true,
-      emailVerifyToken: null,
       resetToken: null,
       resetTokenExpiry: null,
     },
@@ -237,6 +236,24 @@ export async function loginUser(input: { email: string; password: string; worksp
   if (!user) throw new Error("INVALID_CREDENTIALS");
   const valid = await comparePassword(input.password, user.passwordHash);
   if (!valid) throw new Error("INVALID_CREDENTIALS");
+  if (!user.emailVerified) {
+    const otp = String(crypto.randomInt(100000, 1000000));
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetToken: otp,
+        resetTokenExpiry: otpExpiry,
+      },
+    });
+    await sendSystemEmail(user.email, "otp", {
+      code: otp,
+      timestamp: new Date().toISOString(),
+      deviceInfo: "Login verification",
+      location: "Unknown",
+    }).catch(() => null);
+    throw new Error(`EMAIL_NOT_VERIFIED:${user.email}`);
+  }
 
   const workspaces = user.workspaceMembers.map((m) => m.workspace);
   const activeWorkspace =

@@ -10,6 +10,16 @@ function mapAuthError(res: Response, error: unknown) {
   if (msg === "OTP_EXPIRED") return fail(res, "OTP_EXPIRED", "OTP expired", 400);
   if (msg === "TOKEN_INVALID") return fail(res, "TOKEN_INVALID", "Invalid token", 400);
   if (msg === "TOKEN_EXPIRED") return fail(res, "TOKEN_EXPIRED", "Token expired", 400);
+  if (msg.startsWith("EMAIL_NOT_VERIFIED")) {
+    const email = msg.split(":")[1] || "";
+    return fail(
+      res,
+      "EMAIL_NOT_VERIFIED",
+      "Email not verified. Verification OTP sent.",
+      403,
+      email ? { email } : undefined,
+    );
+  }
   if (msg.startsWith("CONFLICT")) return fail(res, "CONFLICT", msg.split(":")[1] || "Conflict", 409);
   return fail(res, "INTERNAL_ERROR", "Something went wrong", 500);
 }
