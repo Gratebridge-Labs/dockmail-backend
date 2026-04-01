@@ -17,6 +17,10 @@ export const acceptInviteSchema = z.object({
   fullName: z.string().min(2).optional(),
 });
 
+export const invitePreviewQuerySchema = z.object({
+  token: z.string().min(1),
+});
+
 export const reviewMailboxRequestSchema = z.object({
   status: z.enum(["APPROVED", "DECLINED"]),
   reviewNote: z.string().max(500).optional(),

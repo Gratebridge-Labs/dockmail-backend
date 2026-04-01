@@ -86,6 +86,16 @@ export async function acceptInvite(req: Request, res: Response) {
   }
 }
 
+export async function invitePreview(req: Request, res: Response) {
+  try {
+    const token = String(req.query.token ?? "");
+    const data = await service.getInvitePreviewByToken(token);
+    return ok(res, data);
+  } catch (err) {
+    return mapErr(res, err);
+  }
+}
+
 export async function mailboxRequests(req: Request, res: Response) {
   const data = await service.mailboxRequests(String(req.params.workspaceId));
   return ok(res, data);

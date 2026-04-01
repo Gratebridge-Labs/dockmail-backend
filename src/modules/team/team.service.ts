@@ -135,6 +135,46 @@ export async function resendInvite(workspaceId: string, inviteId: string) {
   return invite;
 }
 
+export async function getInvitePreviewByToken(token: string) {
+  const invite = await prisma.invite.findUnique({
+    where: { token },
+    include: { workspace: true },
+  });
+  if (!invite) throw new Error("NOT_FOUND");
+
+  const inviter = await prisma.user.findUnique({
+    where: { id: invite.invitedById },
+    select: { fullName: true, email: true },
+  });
+
+  const now = Date.now();
+  const isExpired = invite.expiresAt.getTime() < now;
+  const isAccepted = invite.acceptedAt != null;
+
+  return {
+    workspace: {
+      id: invite.workspace.id,
+      name: invite.workspace.name,
+      slug: invite.workspace.slug,
+      logoUrl: invite.workspace.logoUrl,
+    },
+    invite: {
+      id: invite.id,
+      email: invite.email,
+      role: invite.role,
+      message: invite.message,
+      expiresAt: invite.expiresAt,
+      createdAt: invite.createdAt,
+      isExpired,
+      isAccepted,
+      invitedBy: {
+        fullName: inviter?.fullName ?? null,
+        email: inviter?.email ?? null,
+      },
+    },
+  };
+}
+
 export async function acceptInvite(input: { token: string; password?: string; fullName?: string }) {
   const invite = await prisma.invite.findUnique({ where: { token: input.token } });
   if (!invite) throw new Error("NOT_FOUND");

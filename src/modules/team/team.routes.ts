@@ -5,6 +5,7 @@ import { validate } from "../../middleware/validate";
 import * as controller from "./team.controller";
 import {
   acceptInviteSchema,
+  invitePreviewQuerySchema,
   inviteSchema,
   reviewMailboxRequestSchema,
   updateRoleSchema,
@@ -37,4 +38,5 @@ teamRouter.patch(
 );
 teamRouter.delete("/:memberId", requireRole("ADMIN", "OWNER"), controller.removeMember);
 
+acceptInviteRouter.get("/invite", validate({ query: invitePreviewQuerySchema }), controller.invitePreview);
 acceptInviteRouter.post("/accept-invite", validate({ body: acceptInviteSchema }), controller.acceptInvite);
