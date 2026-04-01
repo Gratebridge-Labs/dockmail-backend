@@ -455,6 +455,7 @@ export async function createDraft(mailboxId: string, input: Record<string, unkno
   const created = await prisma.email.create({
     data: {
       mailboxId,
+      folder: "DRAFTS",
       fromAddress: mailbox.email,
       fromName: mailbox.displayName ?? undefined,
       subject,
