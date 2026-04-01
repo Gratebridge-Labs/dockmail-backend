@@ -14,9 +14,9 @@ export function signRefreshToken(payload: object) {
 }
 
 export function verifyAccessToken<T = jwt.JwtPayload>(token: string) {
-  return jwt.verify(token, env.JWT_ACCESS_SECRET) as T;
+  return jwt.verify(token, env.JWT_ACCESS_SECRET, { clockTolerance: 30 }) as T;
 }
 
 export function verifyRefreshToken<T = jwt.JwtPayload>(token: string) {
-  return jwt.verify(token, env.JWT_REFRESH_SECRET) as T;
+  return jwt.verify(token, env.JWT_REFRESH_SECRET, { clockTolerance: 30 }) as T;
 }
