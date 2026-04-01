@@ -1,8 +1,9 @@
 import crypto from "node:crypto";
-import { Prisma } from "@prisma/client";
+import { Prisma, Role } from "@prisma/client";
 import { prisma } from "../../config/database";
 import { logger } from "../../config/logger";
 import { addMailcowMailbox } from "../../config/mailcow";
+import { sendSystemEmail } from "../../services/email.service";
 
 const mailboxInclude = { domain: true, assignments: true } as const;
 
@@ -115,13 +116,46 @@ export async function createMailbox(
     throw e;
   }
 
+  if (input.assignToUserId) {
+    const [assignedUser, workspace] = await Promise.all([
+      prisma.user.findUnique({ where: { id: input.assignToUserId }, select: { email: true } }),
+      prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } }),
+    ]);
+    if (assignedUser) {
+      await sendSystemEmail(assignedUser.email, "mailbox-created", {
+        email: mailbox.email,
+        displayName: mailbox.displayName ?? "",
+        storageLimit: `${mailbox.storageLimitMb} MiB`,
+        workspaceName: workspace?.name ?? "Dockmail Workspace",
+        createdAt: mailbox.createdAt.toISOString(),
+      }).catch(() => null);
+    }
+  }
+
   return mailbox;
 }
 
 export async function assignMailbox(mailboxId: string, userId: string, assignedById: string) {
-  return prisma.mailboxAssignment.create({
+  const assignment = await prisma.mailboxAssignment.create({
     data: { mailboxId, userId, assignedById },
   });
+  const [mailbox, user, admin] = await Promise.all([
+    prisma.mailbox.findUnique({ where: { id: mailboxId }, select: { email: true, workspaceId: true } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { email: true } }),
+    prisma.user.findUnique({ where: { id: assignedById }, select: { fullName: true } }),
+  ]);
+  const workspace = mailbox
+    ? await prisma.workspace.findUnique({ where: { id: mailbox.workspaceId }, select: { name: true } })
+    : null;
+  if (mailbox && user) {
+    await sendSystemEmail(user.email, "mailbox-assigned", {
+      email: mailbox.email,
+      adminName: admin?.fullName ?? "Workspace Admin",
+      workspaceName: workspace?.name ?? "Dockmail Workspace",
+      assignedAt: new Date().toISOString(),
+    }).catch(() => null);
+  }
+  return assignment;
 }
 
 export function listMailboxRequests(workspaceId: string) {
@@ -131,14 +165,38 @@ export function listMailboxRequests(workspaceId: string) {
   });
 }
 
-export function createMailboxRequest(
+export async function createMailboxRequest(
   workspaceId: string,
   requestedById: string,
   input: { localPart: string; domainId: string; reason?: string },
 ) {
-  return prisma.mailboxRequest.create({
+  const request = await prisma.mailboxRequest.create({
     data: { workspaceId, requestedById, localPart: input.localPart, domainId: input.domainId, reason: input.reason },
   });
+  const [requester, workspace, domain, admins] = await Promise.all([
+    prisma.user.findUnique({ where: { id: requestedById }, select: { fullName: true, email: true } }),
+    prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } }),
+    prisma.domain.findUnique({ where: { id: input.domainId }, select: { domain: true } }),
+    prisma.workspaceMember.findMany({
+      where: { workspaceId, role: { in: [Role.OWNER, Role.ADMIN] } },
+      include: { user: { select: { email: true } } },
+    }),
+  ]);
+  const requestedEmail = `${input.localPart}@${domain?.domain ?? "unknown-domain"}`;
+  await Promise.all(
+    admins.map((m) =>
+      sendSystemEmail(m.user.email, "mailbox-request-submitted", {
+        requesterName: requester?.fullName ?? "Team Member",
+        requesterEmail: requester?.email ?? "",
+        requestedEmail,
+        reason: input.reason ?? "No reason provided",
+        submittedAt: request.createdAt.toISOString(),
+        workspaceName: workspace?.name ?? "Dockmail Workspace",
+        approveUrl: "https://dockmail.app/dashboard/mailboxes?tab=requests",
+      }).catch(() => null),
+    ),
+  );
+  return request;
 }
 
 export async function reviewMailboxRequest(
@@ -165,7 +223,33 @@ export async function reviewMailboxRequest(
       assignToUserId: request.requestedById,
       storageLimitMb: 5120,
     });
+    const [requester, reviewer] = await Promise.all([
+      prisma.user.findUnique({ where: { id: request.requestedById }, select: { email: true } }),
+      prisma.user.findUnique({ where: { id: reviewerId }, select: { fullName: true } }),
+    ]);
+    if (requester) {
+      await sendSystemEmail(requester.email, "mailbox-request-approved", {
+        requestedEmail: mailbox.email,
+        approvedByName: reviewer?.fullName ?? "Workspace Admin",
+        approvedAt: new Date().toISOString(),
+        reviewNote: input.reviewNote ?? "",
+      }).catch(() => null);
+    }
     return { request: updated, mailbox };
+  }
+  const [declineRequester, declineReviewer, workspace, domain] = await Promise.all([
+    prisma.user.findUnique({ where: { id: request.requestedById }, select: { email: true } }),
+    prisma.user.findUnique({ where: { id: reviewerId }, select: { fullName: true } }),
+    prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } }),
+    prisma.domain.findUnique({ where: { id: request.domainId }, select: { domain: true } }),
+  ]);
+  if (declineRequester) {
+    await sendSystemEmail(declineRequester.email, "mailbox-request-declined", {
+      requestedEmail: `${request.localPart}@${domain?.domain ?? "unknown-domain"}`,
+      workspaceName: workspace?.name ?? "Dockmail Workspace",
+      reviewedByName: declineReviewer?.fullName ?? "Workspace Admin",
+      reviewNote: input.reviewNote ?? "",
+    }).catch(() => null);
   }
   return { request: updated };
 }

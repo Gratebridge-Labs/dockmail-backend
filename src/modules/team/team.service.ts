@@ -3,7 +3,7 @@ import { RequestStatus, Role } from "@prisma/client";
 import { prisma } from "../../config/database";
 import { hashPassword } from "../../utils/password";
 import { signAccessToken, signRefreshToken } from "../../utils/jwt";
-import { sendAppEmail } from "../../config/ses";
+import { sendSystemEmail } from "../../services/email.service";
 
 export function listMembers(workspaceId: string) {
   return prisma.workspaceMember.findMany({
@@ -72,11 +72,19 @@ export async function inviteMember(
     },
   });
 
-  await sendAppEmail({
-    from: `no-reply@${process.env.APP_DOMAIN || "dockmail.app"}`,
-    to: [input.email],
-    subject: "You're invited to Dockmail workspace",
-    html: `<p>You have been invited. Accept here: https://dockmail.app/invite?token=${token}</p>`,
+  const [workspace, inviter] = await Promise.all([
+    prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } }),
+    prisma.user.findUnique({ where: { id: invitedById }, select: { fullName: true, email: true } }),
+  ]);
+  await sendSystemEmail(input.email, "invite-member", {
+    inviterName: inviter?.fullName ?? "Workspace Admin",
+    inviterEmail: inviter?.email ?? "",
+    workspaceName: workspace?.name ?? "Dockmail Workspace",
+    role: input.role,
+    mailboxCount: String(input.mailboxIds.length),
+    expiryDate: invite.expiresAt.toISOString(),
+    inviteUrl: `https://dockmail.app/invite?token=${token}`,
+    personalMessage: input.message ?? "",
   }).catch(() => null);
 
   if (input.mailboxIds.length > 0) {
@@ -105,11 +113,15 @@ export function cancelInvite(workspaceId: string, inviteId: string) {
 export async function resendInvite(workspaceId: string, inviteId: string) {
   const invite = await prisma.invite.findFirst({ where: { id: inviteId, workspaceId, acceptedAt: null } });
   if (!invite) throw new Error("NOT_FOUND");
-  await sendAppEmail({
-    from: `no-reply@${process.env.APP_DOMAIN || "dockmail.app"}`,
-    to: [invite.email],
-    subject: "Dockmail invite reminder",
-    html: `<p>Accept invite: https://dockmail.app/invite?token=${invite.token}</p>`,
+  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } });
+  await sendSystemEmail(invite.email, "invite-member", {
+    inviterName: "Workspace Admin",
+    inviterEmail: "",
+    workspaceName: workspace?.name ?? "Dockmail Workspace",
+    role: invite.role,
+    mailboxCount: "0",
+    expiryDate: invite.expiresAt.toISOString(),
+    inviteUrl: `https://dockmail.app/invite?token=${invite.token}`,
   }).catch(() => null);
   return invite;
 }
@@ -158,6 +170,25 @@ export async function acceptInvite(input: { token: string; password?: string; fu
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
   });
+
+  const [workspace, ownerAdmins] = await Promise.all([
+    prisma.workspace.findUnique({ where: { id: invite.workspaceId }, select: { name: true } }),
+    prisma.workspaceMember.findMany({
+      where: { workspaceId: invite.workspaceId, role: { in: [Role.OWNER, Role.ADMIN] } },
+      include: { user: { select: { email: true } } },
+    }),
+  ]);
+  await Promise.all(
+    ownerAdmins.map((m) =>
+      sendSystemEmail(m.user.email, "invite-accepted", {
+        memberName: result.fullName,
+        memberEmail: result.email,
+        workspaceName: workspace?.name ?? "Dockmail Workspace",
+        role: invite.role,
+        joinedAt: new Date().toISOString(),
+      }).catch(() => null),
+    ),
+  );
 
   return { tokens: { accessToken, refreshToken } };
 }

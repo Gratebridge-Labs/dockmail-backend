@@ -4,6 +4,8 @@ import { logger } from "../../config/logger";
 import { deleteMailcowDomain, deleteMailcowMailbox, ensureMailcowDomain } from "../../config/mailcow";
 import { hasMxRecord, hasTxtContains } from "../../utils/dns";
 import fs from "node:fs";
+import { Role } from "@prisma/client";
+import { sendSystemEmail } from "../../services/email.service";
 
 function normalizeDomain(value: string) {
   return value.trim().toLowerCase();
@@ -98,6 +100,25 @@ export async function verifyDomain(workspaceId: string, domainId: string) {
       lastCheckedAt: new Date(),
     },
   });
+
+  const members = await prisma.workspaceMember.findMany({
+    where: { workspaceId, role: { in: [Role.OWNER, Role.ADMIN] } },
+    include: { user: { select: { email: true } } },
+  });
+  const template = verified ? "domain-verified" : "domain-failed";
+  await Promise.all(
+    members.map((m) =>
+      sendSystemEmail(m.user.email, template, {
+        domain: updated.domain,
+        domainId: updated.id,
+        verifiedAt: updated.verifiedAt?.toISOString() ?? new Date().toISOString(),
+        mxStatus: mxVerified ? "✓ Verified" : "✗ Missing/Incorrect",
+        spfStatus: spfVerified ? "✓ Verified" : "✗ Missing/Incorrect",
+        dkimStatus: dkimVerified ? "✓ Verified" : "✗ Missing/Incorrect",
+        dmarcStatus: dmarcVerified ? "✓ Verified" : "✗ Missing/Incorrect",
+      }).catch(() => null),
+    ),
+  );
 
   return {
     domain: updated,

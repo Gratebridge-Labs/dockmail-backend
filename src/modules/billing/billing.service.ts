@@ -1,6 +1,7 @@
-import { BillingStatus, InvoiceStatus, StorageTier } from "@prisma/client";
+import { BillingStatus, InvoiceStatus, Role, StorageTier } from "@prisma/client";
 import { prisma } from "../../config/database";
 import { env } from "../../config/env";
+import { sendSystemEmail } from "../../services/email.service";
 
 const storagePriceMap: Record<StorageTier, number> = {
   GB_5: env.STORAGE_5GB_PRICE,
@@ -94,7 +95,7 @@ export function removePaymentMethod(workspaceId: string) {
 }
 
 export async function updateStorageTier(workspaceId: string, tier: StorageTier) {
-  return prisma.$transaction(async (tx) => {
+  const billing = await prisma.$transaction(async (tx) => {
     const billing = await tx.billing.update({
       where: { workspaceId },
       data: { storageTier: tier },
@@ -117,6 +118,24 @@ export async function updateStorageTier(workspaceId: string, tier: StorageTier) 
     });
     return billing;
   });
+  const [workspace, owners] = await Promise.all([
+    prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } }),
+    prisma.workspaceMember.findMany({
+      where: { workspaceId, role: Role.OWNER },
+      include: { user: { select: { email: true } } },
+    }),
+  ]);
+  await Promise.all(
+    owners.map((m) =>
+      sendSystemEmail(m.user.email, "billing-storage-upgraded", {
+        oldTier: "Previous tier",
+        newTier: tier,
+        additionalCost: String(storagePriceMap[tier]),
+        workspaceName: workspace?.name ?? "Dockmail Workspace",
+      }).catch(() => null),
+    ),
+  );
+  return billing;
 }
 
 export async function simulatePayment(workspaceId: string) {
@@ -150,5 +169,24 @@ export async function simulatePayment(workspaceId: string) {
       currentPeriodEnd: invoice.periodEnd,
     },
   });
+  const owners = await prisma.workspaceMember.findMany({
+    where: { workspaceId, role: Role.OWNER },
+    include: { user: { select: { email: true } } },
+  });
+  await Promise.all(
+    owners.map((m) =>
+      sendSystemEmail(m.user.email, "billing-payment-success", {
+        amount: amount.toFixed(2),
+        mailboxCount: String(mailboxCount),
+        storageLabel: billing.storageTier,
+        storageCost: storageCost.toFixed(2),
+        periodStart: invoice.periodStart.toISOString(),
+        periodEnd: invoice.periodEnd.toISOString(),
+        cardBrand: billing.cardBrand ?? "Card",
+        cardLast4: billing.cardLast4 ?? "----",
+        invoiceId: invoice.id,
+      }).catch(() => null),
+    ),
+  );
   return invoice;
 }

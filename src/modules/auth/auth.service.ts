@@ -4,6 +4,7 @@ import { prisma } from "../../config/database";
 import { comparePassword, hashPassword } from "../../utils/password";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../../utils/jwt";
 import { slugify } from "../../utils/slugify";
+import { sendSystemEmail } from "../../services/email.service";
 
 function authTokens(user: { id: string; email: string; fullName: string }) {
   const accessToken = signAccessToken(user);
@@ -17,60 +18,134 @@ export async function registerUser(input: {
   password: string;
   companyName: string;
 }) {
-  const exists = await prisma.user.findUnique({ where: { email: input.email } });
-  if (exists) throw new Error("CONFLICT:Email already registered");
+  const existing = await prisma.user.findUnique({
+    where: { email: input.email },
+    select: { id: true, emailVerified: true },
+  });
+  if (existing?.emailVerified) throw new Error("CONFLICT:Email already registered");
 
   const passwordHash = await hashPassword(input.password);
   const emailVerifyToken = crypto.randomBytes(24).toString("hex");
+  const otp = String(crypto.randomInt(100000, 1000000));
+  const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
   const slugBase = slugify(input.companyName);
 
-  const result = await prisma.$transaction(async (tx) => {
-    const user = await tx.user.create({
+  if (existing) {
+    await prisma.user.update({
+      where: { id: existing.id },
       data: {
         fullName: input.fullName,
-        email: input.email,
         passwordHash,
         emailVerifyToken,
-      },
-      select: { id: true, email: true, fullName: true, emailVerified: true },
-    });
-
-    let slug = slugBase || `workspace-${Date.now()}`;
-    let suffix = 1;
-    while (await tx.workspace.findUnique({ where: { slug } })) {
-      slug = `${slugBase}-${suffix++}`;
-    }
-
-    const workspace = await tx.workspace.create({
-      data: { name: input.companyName, slug },
-      select: { id: true, name: true, slug: true },
-    });
-
-    await tx.workspaceMember.create({
-      data: { role: Role.OWNER, userId: user.id, workspaceId: workspace.id },
-    });
-
-    await tx.billing.create({
-      data: {
-        workspaceId: workspace.id,
-        status: BillingStatus.TRIALING,
-        trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        resetToken: otp,
+        resetTokenExpiry: otpExpiry,
       },
     });
+  } else {
+    await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          fullName: input.fullName,
+          email: input.email,
+          passwordHash,
+          emailVerifyToken,
+          resetToken: otp,
+          resetTokenExpiry: otpExpiry,
+        },
+        select: { id: true },
+      });
 
-    return { user, workspace };
+      let slug = slugBase || `workspace-${Date.now()}`;
+      let suffix = 1;
+      while (await tx.workspace.findUnique({ where: { slug } })) {
+        slug = `${slugBase}-${suffix++}`;
+      }
+
+      const workspace = await tx.workspace.create({
+        data: { name: input.companyName, slug },
+        select: { id: true },
+      });
+
+      await tx.workspaceMember.create({
+        data: { role: Role.OWNER, userId: user.id, workspaceId: workspace.id },
+      });
+
+      await tx.billing.create({
+        data: {
+          workspaceId: workspace.id,
+          status: BillingStatus.TRIALING,
+          trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        },
+      });
+    });
+  }
+
+  await sendSystemEmail(input.email, "otp", {
+    code: otp,
+    timestamp: new Date().toISOString(),
+    deviceInfo: "Registration",
+    location: "Unknown",
   });
 
-  const tokens = authTokens(result.user);
+  return {
+    status: "OTP_REQUIRED" as const,
+    message: "A 6-digit verification code was sent to your email.",
+    email: input.email,
+  };
+}
+
+export async function verifyRegisterOtp(input: { email: string; otp: string }) {
+  const user = await prisma.user.findUnique({
+    where: { email: input.email },
+    select: {
+      id: true,
+      email: true,
+      fullName: true,
+      emailVerified: true,
+      resetToken: true,
+      resetTokenExpiry: true,
+      workspaceMembers: { select: { workspace: { select: { id: true, name: true, slug: true } } } },
+    },
+  });
+  if (!user) throw new Error("OTP_INVALID");
+  if (user.emailVerified) throw new Error("CONFLICT:Email already registered");
+  if (!user.resetToken || user.resetToken !== input.otp) throw new Error("OTP_INVALID");
+  if (!user.resetTokenExpiry || user.resetTokenExpiry.getTime() < Date.now()) throw new Error("OTP_EXPIRED");
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      emailVerified: true,
+      emailVerifyToken: null,
+      resetToken: null,
+      resetTokenExpiry: null,
+    },
+  });
+
+  const tokens = authTokens({ id: user.id, email: user.email, fullName: user.fullName });
   await prisma.refreshToken.create({
     data: {
       token: tokens.refreshToken,
-      userId: result.user.id,
+      userId: user.id,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
   });
 
-  return { ...result, tokens };
+  const workspaces = user.workspaceMembers.map((m) => m.workspace);
+  const activeWorkspace = workspaces[0] ?? null;
+
+  await sendSystemEmail(user.email, "welcome", {
+    firstName: user.fullName.split(" ")[0] ?? user.fullName,
+    email: user.email,
+    workspaceName: activeWorkspace?.name ?? "Dockmail Workspace",
+  }).catch(() => null);
+
+  return {
+    user: { id: user.id, email: user.email, fullName: user.fullName, emailVerified: true },
+    workspaces,
+    activeWorkspace,
+    tokens,
+  };
 }
 
 export async function loginUser(input: { email: string; password: string; workspaceSlug?: string }) {

@@ -16,6 +16,11 @@ const envSchema = z.object({
   SMTP_SECURE: z.enum(["true", "false"]).default("false"),
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
+  MAIL_FROM_NOREPLY: z.string().default("noreply@dockmail.app"),
+  MAIL_FROM_SUPPORT: z.string().default("support@dockmail.app"),
+  MAIL_FROM_BILLING: z.string().default("billing@dockmail.app"),
+  MAIL_FROM_SECURITY: z.string().default("security@dockmail.app"),
+  SYSTEM_MAILBOX_SHARED_PASS: z.string().optional(),
   MAILCOW_API_URL: z.string().optional(),
   MAILCOW_API_KEY: z.string().optional(),
   /** Set to "true" when calling Mailcow over HTTPS with a self-signed cert (e.g. SSH tunnel to localhost). */

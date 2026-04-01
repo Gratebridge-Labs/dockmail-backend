@@ -1,13 +1,19 @@
 import { Router } from "express";
 import * as controller from "./auth.controller";
 import { validate } from "../../middleware/validate";
-import { loginSchema, refreshSchema, registerSchema } from "./auth.schema";
+import { loginSchema, refreshSchema, registerSchema, verifyRegisterOtpSchema } from "./auth.schema";
 import { authForgotPasswordLimiter, authLoginLimiter, authRegisterLimiter } from "../../middleware/rateLimit";
 import { requireAuth } from "../../middleware/auth";
 
 export const authRouter = Router();
 
 authRouter.post("/register", authRegisterLimiter, validate({ body: registerSchema }), controller.register);
+authRouter.post(
+  "/register/verify-otp",
+  authRegisterLimiter,
+  validate({ body: verifyRegisterOtpSchema }),
+  controller.verifyRegisterOtp,
+);
 authRouter.post("/login", authLoginLimiter, validate({ body: loginSchema }), controller.login);
 authRouter.post("/refresh", validate({ body: refreshSchema }), controller.refresh);
 authRouter.post("/logout", validate({ body: refreshSchema }), controller.logout);
