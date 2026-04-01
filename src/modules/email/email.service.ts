@@ -546,10 +546,12 @@ export async function performSend(mailboxId: string, emailId: string) {
   const bodyHtml = injectTrackingPixel(email.bodyHtml, trackingUrl);
 
   const from = email.mailbox.email;
+  const fromName = email.mailbox.displayName?.trim() || undefined;
   let messageId: string | undefined;
   try {
     messageId = await sendAppEmail({
       from,
+      fromName,
       to: email.toAddresses,
       subject: email.subject,
       html: bodyHtml,

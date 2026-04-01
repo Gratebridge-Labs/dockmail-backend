@@ -54,12 +54,12 @@ export async function sendSystemEmail(
   const template = renderSystemTemplate(templateName, variables);
   const senderRole = senderByTemplate[templateName];
   const fromAddress = resolveSender(senderRole);
-  const from = `Dockmail <${fromAddress}>`;
   const authPass = env.SYSTEM_MAILBOX_SHARED_PASS || env.SMTP_PASS;
 
   try {
     await sendAppEmail({
-      from,
+      from: fromAddress,
+      fromName: "Dockmail",
       to: [to],
       subject: template.subject,
       html: template.html,

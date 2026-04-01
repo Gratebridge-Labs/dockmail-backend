@@ -46,6 +46,22 @@ export async function assignMailbox(req: Request, res: Response) {
   return ok(res, data);
 }
 
+export async function deleteMailbox(req: Request, res: Response) {
+  try {
+    const data = await service.deleteMailbox(String(req.params.workspaceId), String(req.params.mailboxId));
+    return ok(res, data);
+  } catch (error) {
+    if (error instanceof Error && error.message === "NOT_FOUND") {
+      return fail(res, "NOT_FOUND", "Mailbox not found", 404);
+    }
+    logger.error(
+      `deleteMailbox failed: ${error instanceof Error ? error.message : String(error)}`,
+      error instanceof Error ? error : undefined,
+    );
+    return fail(res, "INTERNAL_ERROR", "Failed to delete mailbox", 500);
+  }
+}
+
 export async function listMailboxRequests(req: Request, res: Response) {
   const data = await service.listMailboxRequests(String(req.params.workspaceId));
   return ok(res, data);

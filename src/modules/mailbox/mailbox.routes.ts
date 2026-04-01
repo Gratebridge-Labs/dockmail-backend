@@ -35,3 +35,4 @@ mailboxRouter.patch(
   validate({ body: reviewMailboxRequestSchema }),
   controller.reviewMailboxRequest,
 );
+mailboxRouter.delete("/:mailboxId", requireRole("ADMIN", "OWNER"), controller.deleteMailbox);

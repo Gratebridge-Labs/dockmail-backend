@@ -1,8 +1,9 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
 import { Prisma, Role } from "@prisma/client";
 import { prisma } from "../../config/database";
 import { logger } from "../../config/logger";
-import { addMailcowMailbox } from "../../config/mailcow";
+import { addMailcowMailbox, deleteMailcowMailbox } from "../../config/mailcow";
 import { sendSystemEmail } from "../../services/email.service";
 
 const mailboxInclude = { domain: true, assignments: true } as const;
@@ -159,6 +160,40 @@ export async function createMailbox(
   }
 
   return enrichMailboxAssignments(mailbox);
+}
+
+export async function deleteMailbox(workspaceId: string, mailboxId: string) {
+  const mailbox = await prisma.mailbox.findFirst({
+    where: { id: mailboxId, workspaceId },
+    select: { id: true, email: true },
+  });
+  if (!mailbox) throw new Error("NOT_FOUND");
+
+  const attachments = await prisma.attachment.findMany({
+    where: { email: { mailboxId: mailbox.id } },
+    select: { id: true, storagePath: true },
+  });
+  for (const att of attachments) {
+    if (!att.storagePath) continue;
+    try {
+      if (fs.existsSync(att.storagePath)) fs.unlinkSync(att.storagePath);
+    } catch (e) {
+      logger.warn(
+        `deleteMailbox: failed to remove attachment file ${att.id} (${att.storagePath}) — ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+
+  try {
+    await deleteMailcowMailbox(mailbox.email);
+  } catch (e) {
+    logger.warn(
+      `deleteMailbox: Mailcow delete failed for ${mailbox.email} — ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+
+  await prisma.mailbox.delete({ where: { id: mailbox.id } });
+  return { deleted: true, email: mailbox.email };
 }
 
 export async function assignMailbox(mailboxId: string, userId: string, assignedById: string) {
