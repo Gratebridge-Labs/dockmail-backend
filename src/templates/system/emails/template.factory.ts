@@ -201,7 +201,8 @@ export const buildDomainFailedTemplate: TemplateBuilder = (v) => ({
       { label: "DKIM", value: get(v, "dkimStatus", "✗ Missing/Incorrect") },
       { label: "DMARC", value: get(v, "dmarcStatus", "✗ Missing/Incorrect") },
     ]) +
-    small("DNS changes can take up to 48 hours to propagate. Try verifying again after that time.") +
+    small("DNS changes can take up to 24 hours to propagate. Please be patient and verify again shortly.") +
+    small("Tip: if records were added recently, partial verification is normal while propagation completes.") +
     button("View DNS records", `https://dockmail.app/dashboard/domains/${get(v, "domainId", "")}`),
 });
 export const buildBillingTrialEndingTemplate: TemplateBuilder = (v) => ({

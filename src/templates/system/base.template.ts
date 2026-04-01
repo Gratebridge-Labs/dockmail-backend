@@ -14,11 +14,18 @@ export function baseTemplate(input: { subject: string; content: string; unsubscr
   <style>${systemEmailStyles}</style>
 </head>
 <body bgcolor="#0a0a0a" style="margin:0;padding:0;background:#0a0a0a;">
-  <div class="wrapper" style="width:100%;background:#0a0a0a;padding:48px 16px;">
-    <div class="container" style="max-width:600px;margin:0 auto;background:#111111;border:1px solid #1f1f1f;border-radius:12px;overflow:hidden;">
-      <div class="header" style="padding:32px 40px 24px;border-bottom:1px solid #1a1a1a;"><div class="logo" style="font-size:20px;font-weight:600;color:#ededed;letter-spacing:-0.3px;"><span style="color:#4f8ef7;margin-right:6px;">o</span>Dockmail</div></div>
-      <div class="body" style="padding:40px;">${input.content}</div>
-      <div class="footer" style="padding:28px 40px;border-top:1px solid #1a1a1a;">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" bgcolor="#0a0a0a" style="background:#0a0a0a;margin:0;padding:0;">
+    <tr>
+      <td align="center" style="padding:48px 16px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="600" bgcolor="#111111" style="width:100%;max-width:600px;background:#111111;border:1px solid #1f1f1f;border-radius:12px;overflow:hidden;">
+          <tr>
+            <td class="header" style="padding:32px 40px 24px;border-bottom:1px solid #1a1a1a;"><div class="logo" style="font-size:20px;font-weight:600;color:#ededed;letter-spacing:-0.3px;"><span style="color:#4f8ef7;margin-right:6px;">o</span>Dockmail</div></td>
+          </tr>
+          <tr>
+            <td class="body" style="padding:40px;">${input.content}</td>
+          </tr>
+          <tr>
+            <td class="footer" style="padding:28px 40px;border-top:1px solid #1a1a1a;">
         <div class="footer-logo">Dockmail · by Gratebridge Labs</div>
         <div class="footer-text">
           You're receiving this email because of your account at
@@ -30,9 +37,12 @@ export function baseTemplate(input: { subject: string; content: string; unsubscr
           <a href="https://dockmail.app/support">Support</a>
         </div>
         <div class="footer-text" style="margin-top: 12px;">© 2026 Gratebridge Labs. All rights reserved.</div>
-      </div>
-    </div>
-  </div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>`;
 }

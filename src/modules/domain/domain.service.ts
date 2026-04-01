@@ -19,6 +19,15 @@ function dkimTxtValue() {
   return "v=DKIM1; p=<mailcow-public-key>";
 }
 
+function normalizeDkimPublicKey(input: string | undefined): string | undefined {
+  if (!input) return undefined;
+  const value = input.trim();
+  if (!value) return undefined;
+  const match = value.match(/(?:^|;\s*)p=([^;]+)/i);
+  const key = (match?.[1] ?? value).replace(/\s+/g, "").trim();
+  return key || undefined;
+}
+
 function buildDnsRecords(domain: string, dkimTxt: string) {
   return [
     { type: "MX", name: "@", value: env.INBOUND_MX_HOST, priority: 10 },
@@ -117,8 +126,10 @@ export async function verifyDomain(workspaceId: string, domainId: string) {
     hasTxtContains(`_dmarc.${domain.domain}`, "v=DMARC1").catch(() => false),
   ]);
   const dkimHost = `${env.DKIM_SELECTOR}._domainkey.${domain.domain}`;
-  const dkimPublicPart = dkimTxt.replace(/^v=DKIM1;\s*p=/i, "").trim();
-  const dkimVerified = await hasTxtContains(dkimHost, dkimPublicPart || "v=DKIM1").catch(() => false);
+  const expectedDkimKey = normalizeDkimPublicKey(dkimTxt);
+  const dkimVerified = expectedDkimKey
+    ? await hasTxtContains(dkimHost, expectedDkimKey).catch(() => false)
+    : await hasTxtContains(dkimHost, "v=DKIM1").catch(() => false);
 
   const verified = mailcowVerified && mxVerified && spfVerified && dkimVerified && dmarcVerified;
   const updated = await prisma.domain.update({
