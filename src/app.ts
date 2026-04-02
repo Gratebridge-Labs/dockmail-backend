@@ -1,10 +1,11 @@
 import express from "express";
 import cors from "cors";
+import path from "node:path";
 import { apiLimiter } from "./middleware/rateLimit";
 import { rootRouter } from "./routes";
 import { errorHandler, notFound } from "./middleware/errorHandler";
 import { logger } from "./config/logger";
-import { corsAllowedOrigins } from "./config/env";
+import { corsAllowedOrigins, env } from "./config/env";
 
 export const app = express();
 
@@ -22,6 +23,8 @@ app.use(
   }),
 );
 app.use(express.json({ limit: "5mb" }));
+// Serve only public uploads; private attachments are served via authenticated download endpoints.
+app.use("/uploads", express.static(path.resolve(env.UPLOAD_DIR, "public")));
 app.use(apiLimiter);
 app.use((req, res, next) => {
   const start = Date.now();

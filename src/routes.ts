@@ -11,6 +11,7 @@ import { notificationRouter } from "./modules/notification/notification.routes";
 import { settingsRouter } from "./modules/settings/settings.routes";
 import { folderRouter } from "./modules/folder/folder.routes";
 import { attachmentRouter } from "./modules/attachment/attachment.routes";
+import { uploadRouter } from "./modules/upload/upload.routes";
 
 export const rootRouter = Router();
 
@@ -26,6 +27,7 @@ rootRouter.use("/v1/workspaces/:workspaceId/billing", billingRouter);
 rootRouter.use("/v1/mailboxes/:mailboxId/emails", emailRouter);
 rootRouter.use("/v1/mailboxes/:mailboxId/folders", folderRouter);
 rootRouter.use("/v1/mailboxes/:mailboxId/emails", attachmentRouter);
+rootRouter.use("/v1/uploads", uploadRouter);
 rootRouter.use("/v1/notifications", notificationRouter);
 rootRouter.use("/v1/users/settings", settingsRouter);
 rootRouter.use("/v1/track", trackingRouter);
