@@ -248,10 +248,56 @@ export async function assignMailbox(mailboxId: string, userId: string, assignedB
 }
 
 export function listMailboxRequests(workspaceId: string) {
-  return prisma.mailboxRequest.findMany({
-    where: { workspaceId, status: "PENDING" },
-    orderBy: { createdAt: "desc" },
-  });
+  return prisma.mailboxRequest
+    .findMany({
+      where: { workspaceId, status: "PENDING" },
+      orderBy: { createdAt: "desc" },
+    })
+    .then(enrichMailboxRequests);
+}
+
+export function listMailboxRequestsForUser(workspaceId: string, userId: string) {
+  return prisma.mailboxRequest
+    .findMany({
+      where: { workspaceId, requestedById: userId },
+      orderBy: { createdAt: "desc" },
+    })
+    .then(enrichMailboxRequests);
+}
+
+async function enrichMailboxRequests(
+  requests: Array<{
+    id: string;
+    workspaceId: string;
+    requestedById: string;
+    localPart: string;
+    domainId: string;
+    reason: string | null;
+    status: string;
+    reviewedById: string | null;
+    reviewedAt: Date | null;
+    reviewNote: string | null;
+    createdAt: Date;
+  }>,
+) {
+  const ids = Array.from(
+    new Set(
+      requests.flatMap((r) => [r.requestedById, r.reviewedById].filter((v): v is string => Boolean(v))),
+    ),
+  );
+  const users = ids.length
+    ? await prisma.user.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, email: true, fullName: true, displayName: true, avatarUrl: true },
+      })
+    : [];
+  const byId = new Map(users.map((u) => [u.id, u]));
+
+  return requests.map((r) => ({
+    ...r,
+    requestedBy: byId.get(r.requestedById) ?? null,
+    reviewedBy: r.reviewedById ? (byId.get(r.reviewedById) ?? null) : null,
+  }));
 }
 
 export async function createMailboxRequest(

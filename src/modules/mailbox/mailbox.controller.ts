@@ -79,7 +79,12 @@ export async function deleteMailbox(req: Request, res: Response) {
 }
 
 export async function listMailboxRequests(req: Request, res: Response) {
-  const data = await service.listMailboxRequests(String(req.params.workspaceId));
+  if (!req.user || !req.workspaceMember) return fail(res, "UNAUTHORIZED", "Missing auth context", 401);
+  const workspaceId = String(req.params.workspaceId);
+  const data =
+    req.workspaceMember.role === "ADMIN" || req.workspaceMember.role === "OWNER"
+      ? await service.listMailboxRequests(workspaceId)
+      : await service.listMailboxRequestsForUser(workspaceId, req.user.id);
   return ok(res, data);
 }
 

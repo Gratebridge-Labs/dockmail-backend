@@ -23,7 +23,7 @@ mailboxRouter.post(
   validate({ body: mailboxAssignSchema }),
   controller.assignMailbox,
 );
-mailboxRouter.get("/requests", requireRole("ADMIN", "OWNER"), controller.listMailboxRequests);
+mailboxRouter.get("/requests", requireRole("MEMBER", "ADMIN", "OWNER"), controller.listMailboxRequests);
 mailboxRouter.post(
   "/requests",
   requireRole("MEMBER", "ADMIN", "OWNER"),
