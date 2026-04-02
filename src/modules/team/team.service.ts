@@ -220,6 +220,26 @@ export async function acceptInvite(input: { token: string; password?: string; fu
     },
   });
 
+  const userWithMemberships = await prisma.user.findUnique({
+    where: { id: result.id },
+    select: {
+      id: true,
+      email: true,
+      fullName: true,
+      emailVerified: true,
+      workspaceMembers: {
+        select: {
+          role: true,
+          workspace: { select: { id: true, name: true, slug: true, logoUrl: true } },
+        },
+      },
+    },
+  });
+
+  const workspaces =
+    userWithMemberships?.workspaceMembers.map((m) => ({ ...m.workspace, role: m.role })) ?? [];
+  const activeWorkspace = workspaces.find((w) => w.id === invite.workspaceId) ?? workspaces[0] ?? null;
+
   const [workspace, ownerAdmins] = await Promise.all([
     prisma.workspace.findUnique({ where: { id: invite.workspaceId }, select: { name: true } }),
     prisma.workspaceMember.findMany({
@@ -239,7 +259,19 @@ export async function acceptInvite(input: { token: string; password?: string; fu
     ),
   );
 
-  return { tokens: { accessToken, refreshToken } };
+  return {
+    user: userWithMemberships
+      ? {
+          id: userWithMemberships.id,
+          email: userWithMemberships.email,
+          fullName: userWithMemberships.fullName,
+          emailVerified: userWithMemberships.emailVerified,
+        }
+      : { id: result.id, email: result.email, fullName: result.fullName, emailVerified: true },
+    workspaces,
+    activeWorkspace,
+    tokens: { accessToken, refreshToken },
+  };
 }
 
 export function mailboxRequests(workspaceId: string) {

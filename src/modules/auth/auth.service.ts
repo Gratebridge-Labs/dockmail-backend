@@ -12,6 +12,14 @@ function authTokens(user: { id: string; email: string; fullName: string }) {
   return { accessToken, refreshToken };
 }
 
+const workspaceCardSelect = { id: true, name: true, slug: true, logoUrl: true } as const;
+
+function workspacesWithRole(
+  members: Array<{ role: Role; workspace: { id: string; name: string; slug: string; logoUrl: string | null } }>,
+) {
+  return members.map((m) => ({ ...m.workspace, role: m.role }));
+}
+
 export async function registerUser(input: {
   fullName: string;
   email: string;
@@ -101,7 +109,7 @@ export async function verifyRegisterOtp(input: { email: string; otp: string }) {
       emailVerified: true,
       resetToken: true,
       resetTokenExpiry: true,
-      workspaceMembers: { select: { workspace: { select: { id: true, name: true, slug: true } } } },
+      workspaceMembers: { select: { role: true, workspace: { select: workspaceCardSelect } } },
     },
   });
   if (!user) throw new Error("OTP_INVALID");
@@ -127,7 +135,7 @@ export async function verifyRegisterOtp(input: { email: string; otp: string }) {
     },
   });
 
-  const workspaces = user.workspaceMembers.map((m) => m.workspace);
+  const workspaces = workspacesWithRole(user.workspaceMembers);
   const activeWorkspace = workspaces[0] ?? null;
 
   await sendSystemEmail(user.email, "welcome", {
@@ -229,7 +237,7 @@ export async function loginUser(input: { email: string; password: string; worksp
       passwordHash: true,
       emailVerified: true,
       workspaceMembers: {
-        select: { workspace: { select: { id: true, name: true, slug: true } } },
+        select: { role: true, workspace: { select: workspaceCardSelect } },
       },
     },
   });
@@ -255,7 +263,7 @@ export async function loginUser(input: { email: string; password: string; worksp
     throw new Error(`EMAIL_NOT_VERIFIED:${user.email}`);
   }
 
-  const workspaces = user.workspaceMembers.map((m) => m.workspace);
+  const workspaces = workspacesWithRole(user.workspaceMembers);
   const activeWorkspace =
     (input.workspaceSlug && workspaces.find((w) => w.slug === input.workspaceSlug)) || workspaces[0] || null;
 
@@ -312,16 +320,25 @@ export async function logoutAll(userId: string) {
 }
 
 export async function me(userId: string) {
-  return prisma.user.findUnique({
+  const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
       id: true,
       email: true,
       fullName: true,
       emailVerified: true,
-      workspaceMembers: { select: { workspace: { select: { id: true, name: true, slug: true } }, role: true } },
+      workspaceMembers: { select: { workspace: { select: workspaceCardSelect }, role: true } },
     },
   });
+  if (!user) return null;
+  return {
+    id: user.id,
+    email: user.email,
+    fullName: user.fullName,
+    emailVerified: user.emailVerified,
+    workspaces: workspacesWithRole(user.workspaceMembers),
+    workspaceMembers: user.workspaceMembers,
+  };
 }
 
 export async function deleteUser(userId: string) {
