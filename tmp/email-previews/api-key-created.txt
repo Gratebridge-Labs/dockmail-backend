@@ -1,0 +1,83 @@
+New API key created in Dockmail HQ
+  
+
+  
+    
+      
+        
+          
+            
+              
+                oDockmail
+              
+            
+          
+
+          
+            New API key created
+A new API key was created in your Dockmail workspace. It was shown only once at creation.
+
+  
+    
+      
+        
+  Key name
+  -
+
+  Prefix
+  -
+
+  Permissions
+  -
+
+  Created by
+  -
+
+  Created at
+  2026-04-02T09:15:25.212Z
+
+      
+    
+  
+
+  
+    
+      If you didn't create this key, revoke it immediately.
+    
+  
+
+  
+    
+      Revoke this key
+    
+  
+
+          
+
+          
+            
+              
+                
+                  
+                    Dockmail · by Gratebridge Labs
+                  
+                
+
+                
+                  
+                    You're receiving this email because of your account at
+                    dockmail.app. 
+                  
+                
+
+                
+                  
+                    Privacy
+                    Terms
+                    Support
+                  
+                
+
+                
+                  
+                    © 2026 Gratebridge Labs. All rights reserved.

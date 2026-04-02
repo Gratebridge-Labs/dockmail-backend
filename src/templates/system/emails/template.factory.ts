@@ -2,15 +2,21 @@ import { alert, button, divider, h1, info, p } from "../components.template";
 import { get, TemplateBuilder } from "./template.types";
 
 function small(text: string) {
-  return `<p class="small-link" style="font-size:13px;color:#555555;line-height:1.6;margin:0 0 12px 0;">${text}</p>`;
+  return `<p style="font-size:13px;color:#555555 !important;line-height:1.6;margin:0 0 12px 0;">${text}</p>`;
 }
 
 function code(value: string) {
-  return `<p class="code-block" style="font-family:'Courier New',monospace;font-size:13px;background:#1a1a1a;border:1px solid #1f1f1f;border-radius:4px;padding:8px;color:#4f8ef7;word-break:break-all;margin:0 0 12px 0;">${value}</p>`;
+  return `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" bgcolor="#1a1a1a" style="background-color:#1a1a1a !important;border:1px solid #1f1f1f;border-radius:6px;border-collapse:collapse;margin:0 0 12px 0;">
+  <tr>
+    <td bgcolor="#1a1a1a" style="padding:10px 12px;background-color:#1a1a1a !important;font-family:'Courier New',monospace;font-size:13px;line-height:1.6;color:#4f8ef7 !important;word-break:break-all;">
+      ${value}
+    </td>
+  </tr>
+</table>`;
 }
 
 function list(items: string[]) {
-  return `<ol style="margin: 0 0 20px 20px; color: #888888; font-size: 15px; line-height: 1.8;">${items
+  return `<ol style="margin:0 0 20px 20px;color:#888888 !important;font-size:15px;line-height:1.8;">${items
     .map((i) => `<li>${i}</li>`)
     .join("")}</ol>`;
 }
@@ -52,7 +58,15 @@ export const buildOtpTemplate: TemplateBuilder = (v) => ({
   content:
     h1("Your verification code") +
     p("Enter this code to complete your sign-in. It expires in 10 minutes.") +
-    `<div class="info-box" style="background:#0f0f0f;border:1px solid #1f1f1f;border-radius:8px;padding:18px 20px;margin:20px 0;"><div class="otp-code" style="font-family:'Courier New',monospace;font-size:42px;font-weight:700;letter-spacing:10px;color:#ededed;text-align:center;padding:28px 0;white-space:nowrap;">${plain(get(v, "code")).replace(/\D/g, "").slice(0, 6).split("").join(" ")}</div></div>` +
+    `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" bgcolor="#0f0f0f" style="background-color:#0f0f0f !important;border:1px solid #1f1f1f;border-radius:8px;border-collapse:collapse;margin:20px 0;">
+  <tr>
+    <td bgcolor="#0f0f0f" style="padding:18px 20px;background-color:#0f0f0f !important;">
+      <div style="font-family:'Courier New',monospace;font-size:42px;font-weight:700;letter-spacing:10px;color:#ededed !important;text-align:center;padding:28px 0;white-space:nowrap;">
+        ${plain(get(v, "code")).replace(/\D/g, "").slice(0, 6).split("").join(" ")}
+      </div>
+    </td>
+  </tr>
+</table>` +
     alert("Never share this code with anyone. Dockmail will never ask for it.", "warning") +
     divider() +
     info([

@@ -1,0 +1,67 @@
+⚠ Payment failed for your Dockmail account
+  
+
+  
+    
+      
+        
+          
+            
+              
+                oDockmail
+              
+            
+          
+
+          
+            
+  
+    
+      Payment failed
+    
+  
+
+We couldn't process your payment
+Please update your payment method to keep your mailboxes active.
+
+  
+    
+      Update payment method
+    
+  
+
+  
+    
+      If payment isn't resolved within 7 days, your workspace will be paused.
+    
+  
+
+          
+
+          
+            
+              
+                
+                  
+                    Dockmail · by Gratebridge Labs
+                  
+                
+
+                
+                  
+                    You're receiving this email because of your account at
+                    dockmail.app. 
+                  
+                
+
+                
+                  
+                    Privacy
+                    Terms
+                    Support
+                  
+                
+
+                
+                  
+                    © 2026 Gratebridge Labs. All rights reserved.

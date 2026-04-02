@@ -1,0 +1,80 @@
+opened your email
+  
+
+  
+    
+      
+        
+          
+            
+              
+                oDockmail
+              
+            
+          
+
+          
+            Your email was opened
+ opened the email you sent.
+
+  
+    
+      
+        
+  Email subject
+  -
+
+  Opened
+  -
+
+  Device
+  -
+
+  OS
+  -
+
+  Location
+  -
+
+  Times opened
+  1
+
+      
+    
+  
+
+  
+    
+      View email
+    
+  
+
+          
+
+          
+            
+              
+                
+                  
+                    Dockmail · by Gratebridge Labs
+                  
+                
+
+                
+                  
+                    You're receiving this email because of your account at
+                    dockmail.app. 
+                  
+                
+
+                
+                  
+                    Privacy
+                    Terms
+                    Support
+                  
+                
+
+                
+                  
+                    © 2026 Gratebridge Labs. All rights reserved.

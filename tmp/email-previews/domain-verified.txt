@@ -1,0 +1,84 @@
+dockmail.app is verified and ready ✓
+  
+
+  
+    
+      
+        
+          
+            
+              
+                oDockmail
+              
+            
+          
+
+          
+            
+  
+    
+      Domain verified
+    
+  
+
+dockmail.app is ready
+All DNS records for dockmail.app have been verified. You can now create professional email addresses on this domain.
+
+  
+    
+      
+        
+  MX Record
+  Verified
+
+  SPF Record
+  Verified
+
+  DKIM Record
+  Verified
+
+  DMARC Record
+  Verified
+
+  Verified at
+  2026-04-02T09:15:25.185Z
+
+      
+    
+  
+
+  
+    
+      Create a mailbox
+    
+  
+
+          
+
+          
+            
+              
+                
+                  
+                    Dockmail · by Gratebridge Labs
+                  
+                
+
+                
+                  
+                    You're receiving this email because of your account at
+                    dockmail.app. 
+                  
+                
+
+                
+                  
+                    Privacy
+                    Terms
+                    Support
+                  
+                
+
+                
+                  
+                    © 2026 Gratebridge Labs. All rights reserved.

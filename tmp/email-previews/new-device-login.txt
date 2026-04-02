@@ -1,0 +1,78 @@
+New sign-in to your Dockmail account
+  
+
+  
+    
+      
+        
+          
+            
+              
+                oDockmail
+              
+            
+          
+
+          
+            
+  
+    
+      New device sign-in
+    
+  
+
+New sign-in detected
+Your Dockmail account was signed in from a new device or location.
+
+  
+    
+      
+        
+  Time
+  -
+
+  Device
+  -
+
+  OS
+  -
+
+  Location
+  -
+
+  IP
+  -
+
+      
+    
+  
+
+          
+
+          
+            
+              
+                
+                  
+                    Dockmail · by Gratebridge Labs
+                  
+                
+
+                
+                  
+                    You're receiving this email because of your account at
+                    dockmail.app. 
+                  
+                
+
+                
+                  
+                    Privacy
+                    Terms
+                    Support
+                  
+                
+
+                
+                  
+                    © 2026 Gratebridge Labs. All rights reserved.

@@ -1,0 +1,68 @@
+Verify your email address
+  
+
+  
+    
+      
+        
+          
+            
+              
+                oDockmail
+              
+            
+          
+
+          
+            Verify your email
+Click the button below to verify your email address. This link expires in 24 hours.
+
+  
+    
+      Verify email address
+    
+  
+
+  
+     
+  
+
+Or copy and paste this link into your browser:
+
+  
+    
+      https://dockmail.app/verify/token
+    
+  
+
+This link will expire on tomorrow. If you didn't request this, ignore this email.
+
+          
+
+          
+            
+              
+                
+                  
+                    Dockmail · by Gratebridge Labs
+                  
+                
+
+                
+                  
+                    You're receiving this email because of your account at
+                    dockmail.app. 
+                  
+                
+
+                
+                  
+                    Privacy
+                    Terms
+                    Support
+                  
+                
+
+                
+                  
+                    © 2026 Gratebridge Labs. All rights reserved.

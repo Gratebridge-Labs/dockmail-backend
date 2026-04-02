@@ -1,0 +1,88 @@
+New mailbox request from 
+  
+
+  
+    
+      
+        
+          
+            
+              
+                oDockmail
+              
+            
+          
+
+          
+            
+  
+    
+      Pending approval
+    
+  
+
+Mailbox request
+ has requested a new mailbox in Dockmail HQ.
+
+  
+    
+      
+        
+  Requested by
+   ()
+
+  Requested address
+  
+
+  Reason
+  No reason provided
+
+  Submitted
+  2026-04-02T09:15:25.183Z
+
+      
+    
+  
+
+  
+    
+      Approve
+    
+  
+
+  
+  
+    
+      Review in dashboard
+    
+  
+
+          
+
+          
+            
+              
+                
+                  
+                    Dockmail · by Gratebridge Labs
+                  
+                
+
+                
+                  
+                    You're receiving this email because of your account at
+                    dockmail.app. 
+                  
+                
+
+                
+                  
+                    Privacy
+                    Terms
+                    Support
+                  
+                
+
+                
+                  
+                    © 2026 Gratebridge Labs. All rights reserved.

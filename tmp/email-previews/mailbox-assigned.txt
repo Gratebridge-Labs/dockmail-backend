@@ -1,0 +1,74 @@
+You've been assigned to user@dockmail.app
+  
+
+  
+    
+      
+        
+          
+            
+              
+                oDockmail
+              
+            
+          
+
+          
+            You've been given access to a mailbox
+ has assigned the mailbox user@dockmail.app to you in Dockmail HQ.
+
+  
+    
+      
+        
+  Mailbox
+  user@dockmail.app
+
+  Assigned by
+  
+
+  Workspace
+  Dockmail HQ
+
+  Assigned
+  2026-04-02T09:15:25.182Z
+
+      
+    
+  
+
+  
+    
+      Open mailbox
+    
+  
+
+          
+
+          
+            
+              
+                
+                  
+                    Dockmail · by Gratebridge Labs
+                  
+                
+
+                
+                  
+                    You're receiving this email because of your account at
+                    dockmail.app. 
+                  
+                
+
+                
+                  
+                    Privacy
+                    Terms
+                    Support
+                  
+                
+
+                
+                  
+                    © 2026 Gratebridge Labs. All rights reserved.

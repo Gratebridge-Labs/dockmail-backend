@@ -1,0 +1,109 @@
+Mailbox user@dockmail.app is ready
+  
+
+  
+    
+      
+        
+          
+            
+              
+                oDockmail
+              
+            
+          
+
+          
+            
+  
+    
+      Your mailbox is ready
+    
+  
+
+user@dockmail.app is live
+Your new professional mailbox has been created and is ready to use. You can start sending and receiving emails immediately.
+
+  
+    
+      
+        
+  Mailbox
+  user@dockmail.app
+
+  Display name
+  -
+
+  Storage
+  512 MiB
+
+  Workspace
+  Dockmail HQ
+
+  Created
+  2026-04-02T09:15:25.164Z
+
+      
+    
+  
+
+  
+    
+      Open inbox
+    
+  
+
+  
+     
+  
+
+Configure in your email client
+
+  
+    
+      
+        
+  IMAP
+  mail.dockmail.app : 993 (SSL)
+
+  SMTP
+  mail.dockmail.app : 587 (STARTTLS)
+
+  Username
+  user@dockmail.app
+
+      
+    
+  
+
+Your password was set by your administrator. Contact them if you need it.
+
+          
+
+          
+            
+              
+                
+                  
+                    Dockmail · by Gratebridge Labs
+                  
+                
+
+                
+                  
+                    You're receiving this email because of your account at
+                    dockmail.app. 
+                  
+                
+
+                
+                  
+                    Privacy
+                    Terms
+                    Support
+                  
+                
+
+                
+                  
+                    © 2026 Gratebridge Labs. All rights reserved.

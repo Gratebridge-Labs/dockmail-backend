@@ -1,0 +1,84 @@
+DNS verification failed for dockmail.app
+  
+
+  
+    
+      
+        
+          
+            
+              
+                oDockmail
+              
+            
+          
+
+          
+            
+  
+    
+      Verification failed
+    
+  
+
+dockmail.app couldn't be verified
+We checked the DNS records for dockmail.app but some required records are missing or incorrect.
+
+  
+    
+      
+        
+  MX
+  ✗ Missing/Incorrect
+
+  SPF
+  ✗ Missing/Incorrect
+
+  DKIM
+  ✗ Missing/Incorrect
+
+  DMARC
+  ✗ Missing/Incorrect
+
+      
+    
+  
+
+DNS changes can take up to 24 hours to propagate. Please be patient and verify again shortly.
+Tip: if records were added recently, partial verification is normal while propagation completes.
+
+  
+    
+      View DNS records
+    
+  
+
+          
+
+          
+            
+              
+                
+                  
+                    Dockmail · by Gratebridge Labs
+                  
+                
+
+                
+                  
+                    You're receiving this email because of your account at
+                    dockmail.app. 
+                  
+                
+
+                
+                  
+                    Privacy
+                    Terms
+                    Support
+                  
+                
+
+                
+                  
+                    © 2026 Gratebridge Labs. All rights reserved.
