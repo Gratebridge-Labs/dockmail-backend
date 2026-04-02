@@ -17,6 +17,7 @@ const SYSTEM_SENDER_ADDRESSES = new Set([
 ]);
 
 type MailboxRow = Prisma.MailboxGetPayload<{ include: { domain: true } }>;
+type SessionState = { stop: boolean };
 
 function imapHost() {
   return env.IMAP_HOST ?? env.INBOUND_MX_HOST;
@@ -294,9 +295,20 @@ function createImapClient(mb: MailboxRow) {
 
 async function runMailboxSession(mb: MailboxRow) {
   const label = `imap:${mb.email}`;
+  const state: SessionState = { stop: false };
+  return runMailboxSessionWithState(mb, state);
+}
+
+async function runMailboxSessionWithState(mb: MailboxRow, state: SessionState) {
+  const label = `imap:${mb.email}`;
   while (true) {
+    if (state.stop) {
+      logger.info(`${label} session:stop requested`);
+      return;
+    }
     const client = createImapClient(mb);
     let lock: { release: () => void } | null = null;
+    let poll: NodeJS.Timeout | null = null;
     try {
       client.on("error", (err) => {
         logger.warn(
@@ -339,11 +351,11 @@ async function runMailboxSession(mb: MailboxRow) {
         void safeSync("exists-event");
       });
 
-      const poll = setInterval(() => {
+      poll = setInterval(() => {
         void safeSync("poll");
       }, 15_000);
 
-      while (client.usable) {
+      while (client.usable && !state.stop) {
         try {
           logger.info(`${label} idle:waiting`);
           await client.idle();
@@ -356,13 +368,13 @@ async function runMailboxSession(mb: MailboxRow) {
           break;
         }
       }
-      clearInterval(poll);
     } catch (e) {
       logger.error(
         `${label} session error — ${e instanceof Error ? e.message : String(e)}`,
         e instanceof Error ? e : undefined,
       );
     } finally {
+      if (poll) clearInterval(poll);
       try {
         lock?.release();
       } catch {
@@ -373,6 +385,10 @@ async function runMailboxSession(mb: MailboxRow) {
       } catch {
         client.close();
       }
+    }
+    if (state.stop) {
+      logger.info(`${label} session:stopped`);
+      return;
     }
     await new Promise((r) => setTimeout(r, 5000));
   }
@@ -386,16 +402,59 @@ export function startImapInboundSync() {
 
   void (async () => {
     await new Promise((r) => setTimeout(r, 1500));
-    try {
+    const sessions = new Map<string, SessionState>();
+
+    const reconcile = async () => {
       const mailboxes = await prisma.mailbox.findMany({
         where: { status: "ACTIVE" },
         include: { domain: true },
       });
-      logger.info(`IMAP inbound: starting ${mailboxes.length} mailbox session(s) → ${imapHost()}:${env.IMAP_PORT}`);
-      for (let i = 0; i < mailboxes.length; i++) {
-        void runMailboxSession(mailboxes[i]);
+      const activeEmails = mailboxes.map((m) => m.email).sort();
+      logger.info(
+        `IMAP inbound: reconcile ${mailboxes.length} active mailbox(es) → ${imapHost()}:${env.IMAP_PORT} [${activeEmails.join(", ")}]`,
+      );
+
+      const activeIds = new Set(mailboxes.map((m) => m.id));
+      let stopped = 0;
+      let started = 0;
+
+      // Stop sessions that are no longer active.
+      for (const [mailboxId, state] of sessions.entries()) {
+        if (!activeIds.has(mailboxId)) {
+          state.stop = true;
+          sessions.delete(mailboxId);
+          stopped += 1;
+          logger.info(`IMAP inbound: stopping mailbox session mailboxId=${mailboxId}`);
+        }
+      }
+
+      // Start sessions for newly active mailboxes.
+      for (const mb of mailboxes) {
+        if (sessions.has(mb.id)) continue;
+        const state: SessionState = { stop: false };
+        sessions.set(mb.id, state);
+        started += 1;
+        logger.info(`IMAP inbound: starting mailbox session mailboxId=${mb.id} email=${mb.email}`);
+        void runMailboxSessionWithState(mb, state).finally(() => {
+          const latest = sessions.get(mb.id);
+          // Remove only if this is still the same state object.
+          if (latest === state) sessions.delete(mb.id);
+        });
         await new Promise((r) => setTimeout(r, 150));
       }
+
+      logger.info(
+        `IMAP inbound: reconcile done active=${mailboxes.length} running=${sessions.size} started=${started} stopped=${stopped}`,
+      );
+    };
+
+    try {
+      await reconcile();
+      setInterval(() => {
+        void reconcile().catch((e) => {
+          logger.error(`IMAP inbound: reconcile failed — ${e instanceof Error ? e.message : String(e)}`);
+        });
+      }, 30_000);
     } catch (e) {
       logger.error(`IMAP inbound: failed to list mailboxes — ${e instanceof Error ? e.message : String(e)}`);
     }
