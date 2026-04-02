@@ -101,6 +101,12 @@ export async function mailboxRequests(req: Request, res: Response) {
   return ok(res, data);
 }
 
+export async function myMailboxRequests(req: Request, res: Response) {
+  if (!req.user) return fail(res, "UNAUTHORIZED", "Unauthorized", 401);
+  const data = await service.mailboxRequestsForUser(String(req.params.workspaceId), req.user.id);
+  return ok(res, data);
+}
+
 export async function createMailboxRequest(req: Request, res: Response) {
   if (!req.user) return fail(res, "UNAUTHORIZED", "Unauthorized", 401);
   const data = await service.createMailboxRequest(String(req.params.workspaceId), req.user.id, req.body);

@@ -22,6 +22,7 @@ teamRouter.delete("/invites/:inviteId", requireRole("ADMIN", "OWNER"), controlle
 teamRouter.post("/invites/:inviteId/resend", requireRole("ADMIN", "OWNER"), controller.resendInvite);
 
 teamRouter.get("/mailbox/requests", requireRole("ADMIN", "OWNER"), controller.mailboxRequests);
+teamRouter.get("/mailbox/requests/mine", requireRole("MEMBER", "ADMIN", "OWNER"), controller.myMailboxRequests);
 teamRouter.post("/mailbox/requests", requireRole("MEMBER", "ADMIN", "OWNER"), controller.createMailboxRequest);
 teamRouter.patch(
   "/mailbox/requests/:requestId",
